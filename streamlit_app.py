@@ -1,172 +1,130 @@
-import datetime
-import random
-
-import altair as alt
-import numpy as np
 import pandas as pd
+from sodapy import Socrata
 import streamlit as st
+import plotly.express as px
 
-# Show app title and description.
-st.set_page_config(page_title="Support tickets", page_icon="🎫")
-st.title("🎫 Support tickets")
-st.write(
-    """
-    This app shows how you can build an internal tool in Streamlit. Here, we are 
-    implementing a support ticket workflow. The user can create a ticket, edit 
-    existing tickets, and view some statistics.
-    """
-)
+SOCRATA_DOMAIN = "data.cityofchicago.org"
+DATASET_ID = "ijzp-q8t2"
+# APP_TOKEN = "SOCRATA_TOKEN"  
 
-# Create a random Pandas dataframe with existing tickets.
-if "df" not in st.session_state:
 
-    # Set seed for reproducibility.
-    np.random.seed(42)
+def sync_data():
+    # --- SODA API requests crime data ---
+    client = Socrata(SOCRATA_DOMAIN,None)
 
-    # Make up some fake issue descriptions.
-    issue_descriptions = [
-        "Network connectivity issues in the office",
-        "Software application crashing on startup",
-        "Printer not responding to print commands",
-        "Email server downtime",
-        "Data backup failure",
-        "Login authentication problems",
-        "Website performance degradation",
-        "Security vulnerability identified",
-        "Hardware malfunction in the server room",
-        "Employee unable to access shared files",
-        "Database connection failure",
-        "Mobile application not syncing data",
-        "VoIP phone system issues",
-        "VPN connection problems for remote employees",
-        "System updates causing compatibility issues",
-        "File server running out of storage space",
-        "Intrusion detection system alerts",
-        "Inventory management system errors",
-        "Customer data not loading in CRM",
-        "Collaboration tool not sending notifications",
-    ]
+    
+    results = client.get(DATASET_ID,where="date > '2025-01-01T00:00:00'", 
+                         limit=10000, order="date ASC")
+    
+    df = pd.DataFrame.from_records(results)
 
-    # Generate the dataframe with 100 rows/tickets.
-    data = {
-        "ID": [f"TICKET-{i}" for i in range(1100, 1000, -1)],
-        "Issue": np.random.choice(issue_descriptions, size=100),
-        "Status": np.random.choice(["Open", "In Progress", "Closed"], size=100),
-        "Priority": np.random.choice(["High", "Medium", "Low"], size=100),
-        "Date Submitted": [
-            datetime.date(2023, 6, 1) + datetime.timedelta(days=random.randint(0, 182))
-            for _ in range(100)
-        ],
-    }
-    df = pd.DataFrame(data)
+    if 'date' in df.columns:
+        df['date'] = pd.to_datetime(df['date'])
+    
 
-    # Save the dataframe in session state (a dictionary-like object that persists across
-    # page runs). This ensures our data is persisted when the app updates.
+    num_cols = ['latitude', 'longitude', 'x_coordinate', 'y_coordinate']
+    for col in num_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+
+    df.columns = [col.upper() for col in df.columns]
+
+
+        # Show app title and description.
+    st.set_page_config(page_title="Crime Data Analysis", page_icon="📊")
+    st.title(" 📊 Crime Data Analysis")
+    st.write(
+        """
+        Look what you make me do!.
+        """
+    )
+
     st.session_state.df = df
 
+    st.header("Existing data")
+    st.write(f"Number of data: `{len(st.session_state.df)}`")
 
-# Show a section to add a new ticket.
-st.header("Add a ticket")
-
-# We're adding tickets via an `st.form` and some input widgets. If widgets are used
-# in a form, the app will only rerun once the submit button is pressed.
-with st.form("add_ticket_form"):
-    issue = st.text_area("Describe the issue")
-    priority = st.selectbox("Priority", ["High", "Medium", "Low"])
-    submitted = st.form_submit_button("Submit")
-
-if submitted:
-    # Make a dataframe for the new ticket and append it to the dataframe in session
-    # state.
-    recent_ticket_number = int(max(st.session_state.df.ID).split("-")[1])
-    today = datetime.datetime.now().strftime("%m-%d-%Y")
-    df_new = pd.DataFrame(
-        [
-            {
-                "ID": f"TICKET-{recent_ticket_number+1}",
-                "Issue": issue,
-                "Status": "Open",
-                "Priority": priority,
-                "Date Submitted": today,
-            }
-        ]
+    st.info(
+        "Balabala",
+        icon="✍️",
     )
 
-    # Show a little success message.
-    st.write("Ticket submitted! Here are the ticket details:")
-    st.dataframe(df_new, use_container_width=True, hide_index=True)
-    st.session_state.df = pd.concat([df_new, st.session_state.df], axis=0)
+    show_df = st.dataframe(st.session_state.df, 
+                           use_container_width=True, hide_index=True,
+                            column_config={
+                                 "ID": st.column_config.Column(
+                                      "ID",
+                                      help="Unique identifier for each crime record.",
+                                      width="medium"
+                                 ),
+                                 "DATE": st.column_config.Column(
+                                      "Date",
+                                      help="Date and time when the crime occurred.",
+                                      width="medium"
+                                 ),
+                                 "PRIMARY_TYPE": st.column_config.Column(
+                                      "Primary Type",
+                                      help="Primary classification of the crime (e.g., THEFT, ASSAULT).",
+                                      width="medium"
+                                 ),
+                                 "DESCRIPTION": st.column_config.Column(
+                                      "Description",
+                                      help="Detailed description of the crime.",
+                                      width="medium"
+                                 ),
+                                 "LOCATION_DESCRIPTION": st.column_config.Column(
+                                      "Location Description",
+                                      help="Description of the location where the crime occurred.",
+                                      width="medium"
+                                 ),
+                                 "ARREST": st.column_config.Column(
+                                      "Arrest Made",
+                                      help="Indicates whether an arrest was made (True/False).",
+                                      width="small"
+                                 ),
+                                 "LOCATION": None  # Hide the LOCATION column for better readability                        ),
+                            }
+                           )
 
-# Show section to view and edit existing tickets in a table.
-st.header("Existing tickets")
-st.write(f"Number of tickets: `{len(st.session_state.df)}`")
 
-st.info(
-    "You can edit the tickets by double clicking on a cell. Note how the plots below "
-    "update automatically! You can also sort the table by clicking on the column headers.",
-    icon="✍️",
-)
+    def plot_yearly_trend(df):
+        
+        yearly_counts = df.groupby('YEAR').size().reset_index(name='Crime Count')
+        x = st.dataframe(yearly_counts)
+        fig = px.line(yearly_counts, x='YEAR', y='Crime Count', title='Annual Crime Trend (2014-2024)')
+        st.plotly_chart(fig, use_container_width=True)
 
-# Show the tickets dataframe with `st.data_editor`. This lets the user edit the table
-# cells. The edited data is returned as a new dataframe.
-edited_df = st.data_editor(
-    st.session_state.df,
-    use_container_width=True,
-    hide_index=True,
-    column_config={
-        "Status": st.column_config.SelectboxColumn(
-            "Status",
-            help="Ticket status",
-            options=["Open", "In Progress", "Closed"],
-            required=True,
-        ),
-        "Priority": st.column_config.SelectboxColumn(
-            "Priority",
-            help="Priority",
-            options=["High", "Medium", "Low"],
-            required=True,
-        ),
-    },
-    # Disable editing the ID and Date Submitted columns.
-    disabled=["ID", "Date Submitted"],
-)
+    
+    def plot_hour_day_heatmap(df):
+        # df['Date'] = pd.to_datetime(df['DATE'])
+        df['Hour'] = df['DATE'].dt.hour
+        df['DayOfWeek'] = df['DATE'].dt.dayofweek
+        df['Month'] = df['DATE'].dt.month
 
-# Show some metrics and charts about the ticket.
-st.header("Statistics")
+        print(df[['DATE', 'Hour', 'DayOfWeek']].head())
+        heatmap_data = df.groupby(['DayOfWeek', 'Hour']).size().unstack()
+        fig = px.imshow(heatmap_data, labels=dict(x="Hour of Day", y="Day of Week", color="Crime Frequency"),
+                        title="Crime Heatmap: Hour vs Day of Week")
+        st.plotly_chart(fig, use_container_width=True)
 
-# Show metrics side by side using `st.columns` and `st.metric`.
-col1, col2, col3 = st.columns(3)
-num_open_tickets = len(st.session_state.df[st.session_state.df.Status == "Open"])
-col1.metric(label="Number of open tickets", value=num_open_tickets, delta=10)
-col2.metric(label="First response time (hours)", value=5.2, delta=-1.5)
-col3.metric(label="Average resolution time (hours)", value=16, delta=2)
 
-# Show two Altair charts using `st.altair_chart`.
-st.write("")
-st.write("##### Ticket status per month")
-status_plot = (
-    alt.Chart(edited_df)
-    .mark_bar()
-    .encode(
-        x="month(Date Submitted):O",
-        y="count():Q",
-        xOffset="Status:N",
-        color="Status:N",
-    )
-    .configure_legend(
-        orient="bottom", titleFontSize=14, labelFontSize=14, titlePadding=5
-    )
-)
-st.altair_chart(status_plot, use_container_width=True, theme="streamlit")
 
-st.write("##### Current ticket priorities")
-priority_plot = (
-    alt.Chart(edited_df)
-    .mark_arc()
-    .encode(theta="count():Q", color="Priority:N")
-    .properties(height=300)
-    .configure_legend(
-        orient="bottom", titleFontSize=14, labelFontSize=14, titlePadding=5
-    )
-)
-st.altair_chart(priority_plot, use_container_width=True, theme="streamlit")
+    # Additional visualizations
+    st.subheader("📈 Annual Crime Trend")
+    plot_yearly_trend(st.session_state.df)
+
+    st.subheader("⏰ Crime Heatmap: Hour vs Day of Week")
+    plot_hour_day_heatmap(st.session_state.df)
+
+    st.subheader("🗺️ Crime Hotspots in Chicago")
+    map_df = st.session_state.df[['LATITUDE', 'LONGITUDE']].dropna()
+    st.map(map_df)
+
+    
+    
+
+
+
+if __name__ == "__main__":
+    sync_data()
