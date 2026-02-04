@@ -5,7 +5,7 @@ import plotly.express as px
 
 SOCRATA_DOMAIN = "data.cityofchicago.org"
 DATASET_ID = "ijzp-q8t2"
-# APP_TOKEN = "SOCRATA_TOKEN"  
+# APP_TOKEN = "SOCRATA_TOKEN_NAME"  
 
 
 def sync_data():
