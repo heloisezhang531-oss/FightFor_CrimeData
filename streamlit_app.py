@@ -5,16 +5,20 @@ import plotly.express as px
 
 SOCRATA_DOMAIN = "data.cityofchicago.org"
 DATASET_ID = "ijzp-q8t2"
-# APP_TOKEN = "SOCRATA_TOKEN_NAME"  
+APP_TOKEN = "cqprHN60l59KfgO51lLfqUl1N"  
 
 
 def sync_data():
     # --- SODA API requests crime data ---
-    client = Socrata(SOCRATA_DOMAIN,None)
+    client = Socrata(SOCRATA_DOMAIN,APP_TOKEN)
 
     
-    results = client.get(DATASET_ID,where="date > '2025-01-01T00:00:00'", 
-                         limit=10000, order="date ASC")
+    # results = client.get(DATASET_ID,where="date > '2025-01-01T00:00:00'", 
+    #                      limit=1000, order="date ASC")
+    year = 2024
+    where_clause = f"date > '{year}-01-01T00:00:00' and date < '{year}-12-31T23:59:59'"
+    results = client.get(DATASET_ID,where=where_clause, 
+                         limit=1000, order="date ASC")
     
     df = pd.DataFrame.from_records(results)
 
