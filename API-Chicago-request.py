@@ -1,30 +1,102 @@
-#API-Chicago-request
+import os
+import time
 import pandas as pd
 from sodapy import Socrata
 from sqlalchemy import create_engine
-from sodapy import Socrata
+from dotenv import load_dotenv
 
+# 加载环境变量
+load_dotenv()
 
-# 1. Fetch data from Chicago data portal
-SOCRATA_DOMAIN = "data.cityofchicago.org"
-DATASET_ID = "ijzp-q8t2"
-APP_TOKEN = "cqprHN60l59KfgO51lLfqUl1N"  
-client = Socrata(SOCRATA_DOMAIN,APP_TOKEN)
+# 从环境变量获取配置
+SOCRATA_DOMAIN = os.getenv("SOCRATA_DOMAIN")
+DATASET_ID = os.getenv("SOCRATA_DATASET_ID")
+APP_TOKEN = os.getenv("SOCRATA_APP_TOKEN")
 
-all_batches = []
-for i in range(10):
-    year = 2015 + i
-    where_clause = f"date > '{year}-01-01T00:00:00' and date < '{year}-12-31T23:59:59'"
-    results = client.get(DATASET_ID,where=where_clause, 
-                        limit=1000, order="date ASC")
-    df = pd.DataFrame.from_records(results)
-    all_batches.append(df)
+TIDB_USER = os.getenv("TIDB_USER")
+TIDB_PASSWORD = os.getenv("TIDB_PASSWORD")
+TIDB_HOST = os.getenv("TIDB_HOST")
+TIDB_PORT = os.getenv("TIDB_PORT")
+TIDB_DB_NAME = os.getenv("TIDB_DB_NAME")
+CA_PATH = os.getenv("TID_CA_PATH")
 
-final_df = pd.concat(all_batches, ignore_index=True)
+# 构建连接字符串 (使用 pymysql 驱动)
+# 注意：TiDB Cloud Serverless 建议在连接字符串中包含 SSL 配置
+conn_str = f"mysql+pymysql://{TIDB_USER}:{TIDB_PASSWORD}@{TIDB_HOST}:{TIDB_PORT}/{TIDB_DB_NAME}?ssl_ca={CA_PATH}"
 
-# 2. Connect to TiDB database
-conn_str = "mysql://359KtARLdvjZ8XK.root:zm3W9Rbd6cUUHxge@gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000/test"
+client = Socrata(SOCRATA_DOMAIN, APP_TOKEN, timeout=60)
 engine = create_engine(conn_str)
 
-# 3. 写入 (if_exists='append' 方便多次运行)
-df.to_sql("chicago_crimes", engine, if_exists='append', index=False)
+def fetch_and_save_all():
+    # 每次拉取的大小
+    limit = 10000 
+    
+    # 抓取过去 10 年 (2015 - 2024)
+    for year in range(2015, 2025):
+        print(f"\n🚀 --- 开始抓取年份: {year} ---")
+        offset = 0
+        total_year_records = 0
+        retry_count = 0
+        
+        while True:
+            # SoQL 筛选
+            where_clause = f"date >= '{year}-01-01T00:00:00' and date <= '{year}-12-31T23:59:59'"
+            
+            try:
+                # 1. API 拉取
+                results = client.get(
+                    DATASET_ID, 
+                    where=where_clause, 
+                    limit=limit, 
+                    offset=offset, 
+                    order="date ASC"
+                )
+                
+                if not results:
+                    break # 该年抓完
+                
+                # 2. 清洗
+                batch_df = pd.DataFrame.from_records(results)
+                
+                # 重要：移除包含字典的字段（如 'location'），否则会报 "dict can not be used as parameter"
+                # 这些复杂字段 SQL 无法直接处理
+                if 'location' in batch_df.columns:
+                    batch_df = batch_df.drop(columns=['location'])
+                
+                batch_df.columns = [col.upper() for col in batch_df.columns]
+                if 'DATE' in batch_df.columns:
+                    batch_df['DATE'] = pd.to_datetime(batch_df['DATE'])
+                
+                # 3. 写入 TiDB
+                batch_df.to_sql("chicago_crimes", engine, if_exists='append', index=False, chunksize=1000)
+
+                
+                records_in_batch = len(results)
+                offset += records_in_batch
+                total_year_records += records_in_batch
+                print(f"✅ 进度: {year} 年已存入 {offset} 条记录")
+                
+                # 如果拉取的数量少于 limit，说明这一年也抓完了
+                if records_in_batch < limit:
+                    break
+                    
+            except Exception as e:
+                retry_count += 1
+                print(f"❌ 出错 (年份 {year}, 偏移量 {offset}): {e}")
+                
+                if retry_count > 10:
+                    print("🚫 错误尝试超过 10 次，停止脚本运行。请检查数据库连接或网络配置。")
+                    exit(1)
+                
+                print(f"⚠️ 第 {retry_count} 次重试... 等待 2 秒")
+                time.sleep(2)
+                continue
+                
+            # 成功抓取一次后重置重试计数
+            retry_count = 0 
+
+                
+        print(f"✨ {year} 年抓取完毕，共计 {total_year_records} 条")
+
+if __name__ == "__main__":
+    fetch_and_save_all()
