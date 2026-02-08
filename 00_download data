@@ -1,0 +1,81 @@
+import time
+import random
+import requests
+import pandas as pd
+from io import StringIO
+from pathlib import Path
+
+def download_range(start_iso: str, end_iso: str, out_csv: str, chunk_size: int = 20000):
+    base = "https://data.cityofchicago.org/resource/ijzp-q8t2.csv"
+    out_path = Path(out_csv)
+    state_path = out_path.with_suffix(out_path.suffix + ".offset")
+
+    # 断点：如果 state 文件存在，就从上次 offset 继续；否则从 0 开始并清空输出文件
+    if state_path.exists():
+        offset = int(state_path.read_text().strip())
+        wrote_header = out_path.exists() and out_path.stat().st_size > 0
+    else:
+        offset = 0
+        wrote_header = False
+        if out_path.exists():
+            out_path.unlink()
+
+    total = offset
+    session = requests.Session()
+
+    while True:
+        params = {
+            "$where": f'date >= "{start_iso}" AND date < "{end_iso}"',
+            "$order": "date ASC",
+            "$limit": chunk_size,
+            "$offset": offset,
+        }
+
+        # --- 重试逻辑 ---
+        last_err = None
+        for attempt in range(1, 8):  # 最多重试 7 次
+            try:
+                r = session.get(base, params=params, timeout=120)
+                if r.status_code in (429, 500, 502, 503, 504):
+                    raise requests.HTTPError(f"HTTP {r.status_code}", response=r)
+                r.raise_for_status()
+                text = r.text
+                break
+            except Exception as e:
+                last_err = e
+                sleep_s = min(60, (2 ** attempt)) + random.uniform(0, 1.5)
+                print(f"[WARN] offset={offset} attempt={attempt} failed: {e}. sleep {sleep_s:.1f}s")
+                time.sleep(sleep_s)
+        else:
+            raise RuntimeError(f"Failed after retries at offset={offset}: {last_err}")
+
+        df = pd.read_csv(StringIO(text))
+        if df.empty:
+            print(f"Done: {out_csv} total rows = {total:,}")
+            if state_path.exists():
+                state_path.unlink()
+            break
+
+        df.to_csv(out_path, mode="a", index=False, header=(not wrote_header))
+        wrote_header = True
+
+        n = len(df)
+        offset += n
+        total += n
+
+        # 写断点
+        state_path.write_text(str(offset))
+
+        print(f"{out_csv}: downloaded {total:,} rows...")
+
+        if n < chunk_size:
+            print(f"Done: {out_csv} total rows = {total:,}")
+            if state_path.exists():
+                state_path.unlink()
+            break
+
+
+
+if __name__ == "__main__":
+    download_range("2015-01-01T00:00:00.000", "2025-01-01T00:00:00.000", "crimes_2015_2025.csv")
+    download_range("2025-01-01T00:00:00.000", "2026-01-01T00:00:00.000", "crimes_2025_2026.csv")
