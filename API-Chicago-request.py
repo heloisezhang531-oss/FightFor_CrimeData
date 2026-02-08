@@ -2,7 +2,13 @@ import os
 import time
 import pandas as pd
 from sodapy import Socrata
-from sqlalchemy import create_engine
+# 导入 text 用于 SQL 查询
+from sqlalchemy import create_engine, text
+
+# ... (省略中间代码)
+
+
+
 from dotenv import load_dotenv
 
 # 加载环境变量
@@ -33,10 +39,25 @@ def fetch_and_save_all():
     
     # 抓取过去 10 年 (2015 - 2024)
     for year in range(2015, 2025):
-        print(f"\n🚀 --- 开始抓取年份: {year} ---")
+        print(f"\n🚀 --- 检查年份: {year} ---")
         offset = 0
         total_year_records = 0
+        
+        # --- 断点续传逻辑 ---
+        try:
+            with engine.connect() as conn:
+                # 统计该年份已存在的行数
+                query = text("SELECT COUNT(*) FROM chicago_crimes WHERE YEAR = :year")
+                offset = conn.execute(query, {"year": str(year)}).scalar() or 0
+        except Exception:
+            offset = 0
+            
+        if offset > 0:
+            print(f"🔄 发现断点：该年份已存在 {offset} 条记录，将从此处继续抓取...")
+            total_year_records = offset
+
         retry_count = 0
+
         
         while True:
             # SoQL 筛选

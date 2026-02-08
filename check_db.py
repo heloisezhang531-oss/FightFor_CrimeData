@@ -55,12 +55,59 @@ with engine.connect() as conn:
             confirm = input("是否执行清理（保留唯一记录）? (y/n): ")
             if confirm.lower() == 'y':
                 print("正在清理重复项，请稍候...")
-                # 使用临时表去重方案（大数据量下比 DELETE JOIN 更快更稳）
+                # 方案 C：分批次插入 + 禁用 strict mode
+                # 大数据量 (300万行) 一次性 INSERT ... GROUP BY 容易导致 TiDB Serverless 超时 (Lost connection)
+                # 我们改为分批次搬运数据
+                conn.execute(text("SET SESSION sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''))"))
+                
+                conn.execute(text("DROP TABLE IF EXISTS chicago_crimes_temp"))
                 conn.execute(text("CREATE TABLE chicago_crimes_temp LIKE chicago_crimes"))
-                conn.execute(text("INSERT INTO chicago_crimes_temp SELECT * FROM chicago_crimes GROUP BY ID"))
+                
+                # 获取总行数，用于进度条
+                total_rows = conn.execute(text("SELECT COUNT(*) FROM chicago_crimes")).scalar()
+                batch_size = 50000
+                print(f"开始分批处理，每批 {batch_size} 条，预计 {total_rows // batch_size + 1} 批...")
+                
+                
+                # 修正后的策略：
+                # 1. 创建 temp 表
+                # 2. 给 temp 表的 ID 加上 UNIQUE 索引 (如果原表没有)
+                # 3. 分批 INSERT IGNORE 由于 ID 重复会被忽略
+
+                
+                try:
+                    conn.execute(text("ALTER TABLE chicago_crimes_temp ADD UNIQUE INDEX idx_id_unique (ID)"))
+                except Exception as e:
+                    print("索引可能已存在，跳过创建")
+
+                offset = 0
+                while True:
+                    # 使用 INSERT IGNORE ... SELECT ... LIMIT ...
+                    # 注意：TiDB/MySQL 的 INSERT IGNORE ... SELECT ... LIMIT 有时不支持 OFFSET
+                    # 更稳妥的是：每次读一批，在 Python 里不做处理，直接 INSERT IGNORE 到库里? 不，那样网络开销大。
+                    
+                    # 让我们尝试纯 SQL 的分批：
+                    # INSERT IGNORE INTO temp SELECT * FROM source LIMIT 50000 OFFSET 0;
+                    result = conn.execute(text(f"""
+                        INSERT IGNORE INTO chicago_crimes_temp 
+                        SELECT * FROM chicago_crimes LIMIT {batch_size} OFFSET {offset}
+                    """))
+                    conn.commit() # 每批提交
+                    
+                    rows = result.rowcount
+                    offset += batch_size
+                    print(f"已处理偏移量 {offset}...")
+                    
+                    if rows == 0:
+                        break
+
                 conn.execute(text("DROP TABLE chicago_crimes"))
                 conn.execute(text("ALTER TABLE chicago_crimes_temp RENAME TO chicago_crimes"))
+                
                 conn.commit()
+
+
+
                 print("✅ 清理完成！")
         
         # 4. 查看最新存入的 5 条数据
