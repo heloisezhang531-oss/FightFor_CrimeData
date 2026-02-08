@@ -2,3 +2,6 @@ streamlit
 sodapy
 pandas
 plotly
+SQLAlchemy
+PyMySQL
+python-dotenv

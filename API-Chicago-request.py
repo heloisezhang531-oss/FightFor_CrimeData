@@ -4,11 +4,6 @@ import pandas as pd
 from sodapy import Socrata
 # 导入 text 用于 SQL 查询
 from sqlalchemy import create_engine, text
-
-# ... (省略中间代码)
-
-
-
 from dotenv import load_dotenv
 
 # 加载环境变量

@@ -1,41 +1,72 @@
 import pandas as pd
-from sodapy import Socrata
+from sqlalchemy import create_engine, text
 import streamlit as st
 import plotly.express as px
+import os
+from dotenv import load_dotenv
 
-SOCRATA_DOMAIN = "data.cityofchicago.org"
-DATASET_ID = "ijzp-q8t2"
-APP_TOKEN = "cqprHN60l59KfgO51lLfqUl1N"  
+# Load environment variables
+load_dotenv()
 
+# TiDB Connection Details
+TIDB_USER = os.getenv("TIDB_USER")
+TIDB_PASSWORD = os.getenv("TIDB_PASSWORD")
+TIDB_HOST = os.getenv("TIDB_HOST")
+TIDB_PORT = os.getenv("TIDB_PORT")
+TID_CA_PATH = os.getenv("TID_CA_PATH")
+TIDB_DB_NAME = os.getenv("TIDB_DB_NAME") or "Chicago_data"
+
+def get_db_connection():
+    # Construct connection URL
+    url = f"mysql+pymysql://{TIDB_USER}:{TIDB_PASSWORD}@{TIDB_HOST}:{TIDB_PORT}/{TIDB_DB_NAME}?ssl_ca={TID_CA_PATH}&ssl_verify_cert=true&ssl_verify_identity=true"
+    engine = create_engine(url)
+    return engine
 
 def sync_data():
-    # --- SODA API requests crime data ---
-    client = Socrata(SOCRATA_DOMAIN,APP_TOKEN)
+    # --- TiDB Database Query ---
+    try:
+        engine = get_db_connection()
+        year = 2024
+        # Query matching the original logic: entire year 2024
+        query = text(f"""
+            SELECT * 
+            FROM chicago_crimes 
+            WHERE DATE >= '{year}-01-01 00:00:00' 
+              AND DATE <= '{year}-12-31 23:59:59'
+            ORDER BY DATE ASC
+            LIMIT 1000
+        """)
+        
+        with engine.connect() as conn:
+            df = pd.read_sql(query, conn)
+            
+    except Exception as e:
+        st.error(f"Database connection failed: {e}")
+        return
 
-    
-    # results = client.get(DATASET_ID,where="date > '2025-01-01T00:00:00'", 
-    #                      limit=1000, order="date ASC")
-    year = 2024
-    where_clause = f"date > '{year}-01-01T00:00:00' and date < '{year}-12-31T23:59:59'"
-    results = client.get(DATASET_ID,where=where_clause, 
-                         limit=1000, order="date ASC")
-    
-    df = pd.DataFrame.from_records(results)
-
-    if 'date' in df.columns:
+    # Ensure date column is datetime
+    if 'DATE' in df.columns:
+        df['DATE'] = pd.to_datetime(df['DATE'])
+    elif 'date' in df.columns:
         df['date'] = pd.to_datetime(df['date'])
-    
 
+    # Handle numeric columns
+    # Note: TiDB columns might already be numeric, but good to ensure
     num_cols = ['latitude', 'longitude', 'x_coordinate', 'y_coordinate']
     for col in num_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+         # Check both lower and upper case as DB column names case sensitivity can vary
+        upper_col = col.upper()
+        if upper_col in df.columns:
+            df[upper_col] = pd.to_numeric(df[upper_col], errors='coerce')
+        elif col in df.columns:
+             df[col] = pd.to_numeric(df[col], errors='coerce')
 
 
+    # Standardize column names to uppercase
     df.columns = [col.upper() for col in df.columns]
 
 
-        # Show app title and description.
+    # Show app title and description.
     st.set_page_config(page_title="Crime Data Analysis", page_icon="📊")
     st.title(" 📊 Crime Data Analysis")
     st.write(
@@ -93,6 +124,9 @@ def sync_data():
 
 
     def plot_yearly_trend(df):
+        # Ensure YEAR column exists or derive it
+        if 'YEAR' not in df.columns:
+             df['YEAR'] = df['DATE'].dt.year
         
         yearly_counts = df.groupby('YEAR').size().reset_index(name='Crime Count')
         x = st.dataframe(yearly_counts)
@@ -106,7 +140,7 @@ def sync_data():
         df['DayOfWeek'] = df['DATE'].dt.dayofweek
         df['Month'] = df['DATE'].dt.month
 
-        print(df[['DATE', 'Hour', 'DayOfWeek']].head())
+        # print(df[['DATE', 'Hour', 'DayOfWeek']].head())
         heatmap_data = df.groupby(['DayOfWeek', 'Hour']).size().unstack()
         fig = px.imshow(heatmap_data, labels=dict(x="Hour of Day", y="Day of Week", color="Crime Frequency"),
                         title="Crime Heatmap: Hour vs Day of Week")
@@ -122,8 +156,12 @@ def sync_data():
     plot_hour_day_heatmap(st.session_state.df)
 
     st.subheader("🗺️ Crime Hotspots in Chicago")
-    map_df = st.session_state.df[['LATITUDE', 'LONGITUDE']].dropna()
-    st.map(map_df)
+    # Check if LATITUDE and LONGITUDE exist
+    if 'LATITUDE' in st.session_state.df.columns and 'LONGITUDE' in st.session_state.df.columns:
+        map_df = st.session_state.df[['LATITUDE', 'LONGITUDE']].dropna()
+        st.map(map_df)
+    else:
+        st.warning("Latitude/Longitude data not available for mapping.")
 
     
     
