@@ -187,3 +187,18 @@ def get_recent_data(engine, limit=1000):
     except Exception as e:
         st.error(f"Error fetching recent data: {e}")
         return pd.DataFrame()
+
+def get_map_data(engine, limit=10000):
+    """Fetches latitude and longitude for a sample of crimes."""
+    try:
+        with engine.connect() as conn:
+            query = text(f"SELECT latitude, longitude FROM chicago_crimes WHERE {DATE_FILTER} AND latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY date DESC LIMIT {limit}")
+            result = pd.read_sql(query, conn)
+            # Ensure numeric types for map
+            result['latitude'] = pd.to_numeric(result['latitude'], errors='coerce')
+            result['longitude'] = pd.to_numeric(result['longitude'], errors='coerce')
+            result = result.dropna(subset=['latitude', 'longitude'])
+            return result
+    except Exception as e:
+        st.error(f"Error fetching map data: {e}")
+        return pd.DataFrame()

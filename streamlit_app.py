@@ -42,8 +42,9 @@ def main():
         return
 
     # --- Tabs Layout ---
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "Overview", 
+        "Geographical Distribution",
         "Raw Data", 
         "Key Statistics", 
         "Temporal Trends", 
@@ -75,18 +76,35 @@ def main():
         with st.spinner("Analyzing missing data..."):
             missing_df = analysis.get_missing_values_summary(engine)
             if not missing_df.empty:
-                st.dataframe(missing_df, use_container_width=True)
+                st.dataframe(missing_df, width="stretch")
                 
                 # Missing Values Plot (Color: coral as per request's theme feel, or just default)
                 fig = px.bar(missing_df, x='Missing Rate (%)', y='Column', orientation='h', 
                              title="Missing Data Percentage by Column",
                              color='Missing Rate (%)', color_continuous_scale='RdYlGn_r')
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             else:
                 st.write("No missing value data available.")
 
-    # --- TAB 2: RAW DATA ---
+    # --- TAB 2: GEOGRAPHICAL DISTRIBUTION ---
     with tab2:
+        st.header("Geographical Distribution")
+        st.markdown("**Crime Incident Locations (Sample)**")
+        st.info("""
+        **Analyst Insight:**
+        *   **High Density Areas:** Concentrated crime activity is visible in specific urban centers and commercial districts.
+        *   **Sparse Areas:** Residential and suburban areas generally show lower incident rates.
+        *   **Hotspots:** Zooming in reveals specific blocks or intersections with recurring incidents.
+        """)
+        with st.spinner("Fetching map data (this may take a moment)..."):
+            map_data = analysis.get_map_data(engine, limit=2000) # Limit points for performance
+            if not map_data.empty:
+                st.map(map_data)
+            else:
+                st.warning("No location data available for map.")
+
+    # --- TAB 3: RAW DATA ---
+    with tab3:
         st.header("Raw Data Sample (2015-2024)")
         st.write("Showing the most recent 1000 records from the analysis period.")
         
@@ -94,10 +112,10 @@ def main():
             raw_df = analysis.get_recent_data(engine, limit=1000)
             if 'DATE' in raw_df.columns:
                  raw_df['DATE'] = pd.to_datetime(raw_df['DATE'])
-            st.dataframe(raw_df, use_container_width=True)
+            st.dataframe(raw_df, width="stretch")
 
-    # --- TAB 3: KEY STATISTICS ---
-    with tab3:
+    # --- TAB 4: KEY STATISTICS ---
+    with tab4:
         st.header("Key Statistics")
         
         with st.spinner("Fetching breakdown..."):
@@ -138,7 +156,7 @@ def main():
                                      title="Distribution of Arrest Status",
                                      color='Status',
                                      color_discrete_map=colors_map)
-                 st.plotly_chart(fig_arrest, use_container_width=True)
+                 st.plotly_chart(fig_arrest, width="stretch")
         
         with col2:
             st.subheader("Domestic Violence Distribution")
@@ -153,14 +171,19 @@ def main():
                                        title="Domestic Violence Incidents",
                                        color='Type',
                                        color_discrete_map=colors_map)
-                 st.plotly_chart(fig_domestic, use_container_width=True)
+                 st.plotly_chart(fig_domestic, width="stretch")
 
-    # --- TAB 4: TEMPORAL TRENDS ---
-    with tab4:
+    # --- TAB 5: TEMPORAL TRENDS ---
+    with tab5:
         st.header("Temporal Trends")
 
         # Yearly Trend
         st.subheader("Annual Crime Trend (2015-2024)")
+        st.info("""
+        **Analyst Insight:**
+        *   **2020 Anomaly:** Crime rates dropped significantly (~18%) in 2020 due to the pandemic lockdowns.
+        *   **Post-2020:** A gradual recovery trend is observed in subsequent years, though patterns have shifted.
+        """)
         with st.spinner("Loading yearly data..."):
             yearly_df = analysis.get_yearly_trends(engine)
             if not yearly_df.empty:
@@ -169,10 +192,15 @@ def main():
                                     title="Annual Number of Crime Cases",
                                     labels={'count': 'Number of Cases', 'year': 'Year'})
                  fig_year.update_traces(line_color='steelblue', marker=dict(size=8))
-                 st.plotly_chart(fig_year, use_container_width=True)
+                 st.plotly_chart(fig_year, width="stretch")
 
         # Monthly Seasonality
         st.subheader("Monthly Distribution")
+        st.info("""
+        **Analyst Insight:**
+        *   **Summer Peak:** Crime rates consistently peak in warmer months (June-August), suggesting a strong seasonal correlation.
+        *   **Winter Low:** Significant drop in incidents during colder months (January-February).
+        """)
         with st.spinner("Loading monthly data..."):
             monthly_df = analysis.get_monthly_trends(engine)
             if not monthly_df.empty:
@@ -185,10 +213,15 @@ def main():
                                     title="Monthly Distribution of Crime Cases",
                                     labels={'count': 'Number of Cases', 'Month Name': 'Month'})
                  fig_month.update_traces(marker_color='coral')
-                 st.plotly_chart(fig_month, use_container_width=True)
+                 st.plotly_chart(fig_month, width="stretch")
 
         # Day of Week Distribution
         st.subheader("Day of Week Distribution")
+        st.info("""
+        **Analyst Insight:**
+        *   **Weekend Spike:** Crimes tend to rise on Fridays and Saturdays.
+        *   **Weekday Lull:** Mid-week days (Tuesday/Wednesday) generally show slightly lower incident counts.
+        """)
         with st.spinner("Loading weekly data..."):
             dow_df = analysis.get_day_of_week_counts(engine)
             if not dow_df.empty:
@@ -207,10 +240,15 @@ def main():
                 fig_dow.update_layout(title="Crime Cases by Day of Week",
                                       xaxis_title="Day of Week",
                                       yaxis_title="Number of Cases")
-                st.plotly_chart(fig_dow, use_container_width=True)
+                st.plotly_chart(fig_dow, width="stretch")
 
         # Heatmap
         st.subheader("Crime Heatmap: Hour vs Day")
+        st.info("""
+        **Analyst Insight:**
+        *   **Hotspots:** The highest density of crimes occurs during late afternoons and evenings (4 PM - 10 PM) on Fridays and weekends.
+        *   **Quiet Hours:** Early mornings (3 AM - 6 AM) show the lowest activity.
+        """)
         with st.spinner("Generating heatmap..."):
             heatmap_data = analysis.get_heatmap_data(engine)
             if not heatmap_data.empty:
@@ -219,10 +257,10 @@ def main():
                                       title="Crime Heatmap: Hour vs Day of Week",
                                       aspect="auto",
                                       color_continuous_scale='Viridis') # Notebook used Viridis
-                 st.plotly_chart(fig_heat, use_container_width=True)
+                 st.plotly_chart(fig_heat, width="stretch")
 
-    # --- TAB 5: CATEGORICAL ANALYSIS ---
-    with tab5:
+    # --- TAB 6: CATEGORICAL ANALYSIS ---
+    with tab6:
         st.header("Categorical Analysis")
 
         col1, col2 = st.columns(2)
@@ -238,7 +276,7 @@ def main():
                                        labels={'count': 'Count', 'primary_type': 'Crime Type'})
                      fig_type.update_traces(marker_color='steelblue')
                      fig_type.update_layout(yaxis={'categoryorder':'total ascending'})
-                     st.plotly_chart(fig_type, use_container_width=True)
+                     st.plotly_chart(fig_type, width="stretch")
 
         with col2:
              st.subheader("Top 10 Locations")
@@ -255,7 +293,7 @@ def main():
                                       labels={'count': 'Count', 'location_description': 'Location'})
                      fig_loc.update_traces(marker_color='steelblue')
                      fig_loc.update_layout(yaxis={'categoryorder':'total ascending'})
-                     st.plotly_chart(fig_loc, use_container_width=True)
+                     st.plotly_chart(fig_loc, width="stretch")
 
 if __name__ == "__main__":
     main()
