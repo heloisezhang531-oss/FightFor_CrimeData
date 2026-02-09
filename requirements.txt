@@ -1,6 +1,8 @@
 streamlit
 sodapy
 pandas
+matplotlib
+scipy
 plotly
 SQLAlchemy
 PyMySQL
