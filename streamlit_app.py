@@ -13,12 +13,12 @@ import analysis
 load_dotenv()
 
 # TiDB Connection Details
-TIDB_USER = os.getenv("TIDB_USER")
-TIDB_PASSWORD = os.getenv("TIDB_PASSWORD")
-TIDB_HOST = os.getenv("TIDB_HOST")
-TIDB_PORT = os.getenv("TIDB_PORT")
-TID_CA_PATH = os.getenv("TID_CA_PATH")
-TIDB_DB_NAME = os.getenv("TIDB_DB_NAME") or "Chicago_data"
+TIDB_USER = st.secrets["TIDB_USER"]
+TIDB_PASSWORD = st.secrets["TIDB_PASSWORD"]
+TIDB_HOST = st.secrets["TIDB_HOST"]
+TIDB_PORT = st.secrets["TIDB_PORT"]
+TID_CA_PATH = st.secrets["TID_CA_PATH"]
+TIDB_DB_NAME = st.secrets["TIDB_DB_NAME"] or "Chicago_data"
 
 @st.cache_resource
 def get_db_connection():
