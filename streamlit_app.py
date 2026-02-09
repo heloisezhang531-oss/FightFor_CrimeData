@@ -246,7 +246,7 @@ def main():
         st.subheader("Crime Heatmap: Hour vs Day")
         st.info("""
         **Analyst Insight:**
-        *   **Hotspots:** The highest density of crimes occurs during middays and midnights (12 PM & 12 AM).
+        *   **Hotspots:** The highest density of crimes occurs during middays in weekdays and midnights in weekends.
         *   **Quiet Hours:** Early mornings (3 AM - 6 AM) show the lowest activity.
         """)
         with st.spinner("Generating heatmap..."):
