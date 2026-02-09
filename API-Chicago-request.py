@@ -33,8 +33,8 @@ def fetch_and_save_all():
     # 每次拉取的大小
     limit = 10000 
     
-    # 抓取过去 10 年 (2015 - 2024)
-    for year in range(2015, 2025):
+    # 抓取过去 11 年 (2015 - 2025)
+    for year in range(2015, 2026):
         print(f"\n🚀 --- 检查年份: {year} ---")
         offset = 0
         total_year_records = 0
