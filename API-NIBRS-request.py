@@ -1,21 +1,15 @@
 import os
 import time
-import requests
 import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
-
-# 目前FBI API Key不可用
 
 # 加载环境变量
 load_dotenv()
 
 # --- 配置信息 ---
-# User requested to use SOCRATA_APP_TOKEN
-FBI_API_KEY = os.getenv("FBI_API_KEY") 
-BASE_URL = "https://api.usa.gov/crime/fbi/sapi" 
-# Chicago Police Department ORI
-CHICAGO_ORI = "IL0160200"
+# Local Data Directory
+DATA_DIR = r"D:\NUS\IT5006\project\FBI data"
 
 # 数据库配置
 TIDB_USER = os.getenv("TIDB_USER")
@@ -30,130 +24,174 @@ conn_str = f"mysql+pymysql://{TIDB_USER}:{TIDB_PASSWORD}@{TIDB_HOST}:{TIDB_PORT}
 engine = create_engine(conn_str)
 
 # NIBRS 表列表 (根据 NIBRS 数据结构)
-# 注意: FBI API 的 endpoint 可能不完全对应这些表名，需要根据实际API文档调整
-# 这里假设存在类似 /incident, /offense 等 endpoint，或者通过 fetch_nibrs_data 内部逻辑处理
 NIBRS_TABLES = [
-    "nibrs_incident",
-    "nibrs_offense", 
-    "nibrs_victim", 
-    "nibrs_offender", 
-    "nibrs_arrestee",
+    "nibrs_weapon",
+    "nibrs_criminal_act",
+    "nibrs_victim_offense",
+    "nibrs_victim_offender_rel",
+    "nibrs_victim_injury",
+    "nibrs_victim_circumstances",
+    "nibrs_victim",
+    "nibrs_suspected_drug",
+    "nibrs_suspect_using",
+    "nibrs_property_desc",
     "nibrs_property",
+    "nibrs_offense",
+    "nibrs_offender",
+    "nibrs_incident",
+    "nibrs_month",
+    "nibrs_bias_motivation",
+    "nibrs_arrestee_weapon",
+    "nibrs_arrestee",
+    "cde_agencies",
+    "agency_participation",
+    "nibrs_age",
+    "nibrs_arrest_type",
+    "nibrs_assignment_type",
+    "nibrs_bias_list",
+    "nibrs_circumstances",
+    "nibrs_cleared_except",
+    "nibrs_criminal_act_type",
+    "nibrs_drug_measure",
+    "nibrs_drug_measure_type",
+    "nibrs_ethnicity",
+    "nibrs_injury",
+    "nibrs_justifiable_force",
+    "nibrs_location_type",
+    "nibrs_offense_type",
+    "nibrs_prop_desc_type",
+    "nibrs_prop_loss_type",
+    "nibrs_relationship",
+    "nibrs_suspected_drug_type",
+    "nibrs_using_list",
+    "nibrs_victim_type",
+    "nibrs_weapon_type"
 ]
 
-def get_headers():
-    return {
-        "User-Agent": "Mozilla/5.0",
-        "Authorization": f"Basic {FBI_API_KEY}" if FBI_API_KEY else None
-        # 注意：data.gov key 通常通过 url param 'api_key' 传递，或者 header 'X-Api-Key'
-        # 如果是 data.gov, 通常是 ?api_key=XYZ
-    }
+from sqlalchemy import create_engine, text, inspect
 
-def fetch_and_save_nibrs():
-    # 每次请求的参数配置 (如果支持分页)
-    limit = 10000
-    
+# ... (imports remain the same)
+
+def process_and_upload_local_data():
+    """
+    遍历本地文件夹 (IL-2015 到 IL-2024)，读取 CSV 文件并上传到 TiDB。
+    """
+    inspector = inspect(engine)
+
     # 遍历年份
     for year in range(2015, 2025):
-        print(f"\n🚀 --- 检查年份: {year} ---")
+        year_folder_name = f"IL-{year}"
+        year_dir_path = os.path.join(DATA_DIR, year_folder_name)
         
+        print(f"\n🚀 --- 处理年份: {year} (文件夹: {year_folder_name}) ---")
+        
+        if not os.path.exists(year_dir_path):
+             print(f"    ⚠️ 文件夹不存在: {year_dir_path}，跳过该年份。")
+             continue
+
         # 遍历每张表
         for table in NIBRS_TABLES:
-            print(f"  📂 处理表: {table}")
+            csv_filename = f"{table}.csv"
+            csv_file_path = os.path.join(year_dir_path, csv_filename)
             
-            # --- 断点续传检查 ---
-            offset = 0
+            print(f"  📂 处理表: {table} (文件: {csv_filename})")
+            
+            if not os.path.exists(csv_file_path):
+                print(f"    ⚠️ 文件不存在: {csv_file_path}，跳过。")
+                continue
+            
+            # Check table existence via Inspector
+            table_exists = False
+            db_columns = []
             try:
-                with engine.connect() as conn:
-                    # 检查该表、该年份已有的记录数
-                    # 注意: 需要确保数据库中已有该表，否则 count 会报错，这里加个简单的 try-except 忽略表不存在的情况
-                    query = text(f"SELECT COUNT(*) FROM {table} WHERE data_year = :year")
-                    offset = conn.execute(query, {"year": year}).scalar() or 0
+                # Refresh inspector implies just calling checks, but inspector object might cache? 
+                # Safer to verify existence directly or rely on engine.
+                if inspector.has_table(table):
+                    table_exists = True
+                    # Get columns
+                    columns_info = inspector.get_columns(table)
+                    db_columns = [col['name'] for col in columns_info]
+                    # print(f"    📋 Table found. Columns: {db_columns}")
+                else:
+                    # print(f"    🆕 Table {table} does not exist. Will create.")
+                    table_exists = False
             except Exception as e:
-                # 表可能不存在，或者没有 data_year 字段
-                # print(f"    (断点检查跳过: {e})")
-                offset = 0
+                print(f"    ⚠️ Error checking table {table}: {e}")
+                # Fallback to assuming not exists or connection issue
+                table_exists = False
 
-            if offset > 0:
-                print(f"    🔄 {table} 发现断点：已存在 {offset} 条记录，尝试继续...")
-
-            retry_count = 0
-            
-            while True:
-                # 构造 API 请求
-                # 注意: 这里是假设的 endpoint 结构，FBI CDE API 结构比较复杂，可能需要根据实际情况调整 url
-                # 如果 API 不支持直接 table access，可能需要调用 summarized endpoint
-                # 下面代码尝试使用 generic 的 endpoint 结构
+            try:
+                # 1. 读取 CSV 数据
+                chunk_size = 10000
+                total_records = 0
                 
-                # 示例 URL 结构 (需验证): 
-                # https://api.usa.gov/crime/fbi/cde/agency/IL0160200/nibrs/incident?year=2024&...
-                # 实际 FBI API 往往需要 api_key 参数
-                
-                api_url = f"{BASE_URL}/agency/{CHICAGO_ORI}/{table}"
-                params = {
-                    "api_key": FBI_API_KEY,
-                    "year": year,
-                    "limit": limit,
-                    "offset": offset,
-                    # "page": ... (如果 API 使用 page 而不是 offset)
-                }
+                if os.path.getsize(csv_file_path) < 100:
+                     df_peek = pd.read_csv(csv_file_path, nrows=1)
+                     if df_peek.empty:
+                         print(f"    ⚠️ 文件为空或无数据，跳过。")
+                         continue
 
-                try:
-                    # 1. 发送请求
-                    response = requests.get(api_url, params=params, headers=get_headers())
-                    
-                    if response.status_code != 200:
-                        print(f"    ❌ API 请求失败 [{response.status_code}]: {response.text[:100]}")
-                        break # 跳过该表/该年，或者重试
-                    
-                    data = response.json()
-                    results = data.get('results', []) # 假设返回结构中有 results 字段
-                    
-                    if not results:
-                        print(f"    ✅ {table} {year} 年无更多数据")
-                        break
+                for chunk_idx, df in enumerate(pd.read_csv(csv_file_path, chunksize=chunk_size)):
                     
                     # 2. 清洗数据
-                    df = pd.DataFrame(results)
+                    # 统一转小写
+                    df.columns = [col.lower() for col in df.columns]
                     
-                    # 统一大写列名
-                    df.columns = [col.upper() for col in df.columns]
+                    # 确保有一个 data_year 字段
+                    if 'data_year' not in df.columns:
+                        df['data_year'] = year
+
+                    df_final = df
                     
-                    # 确保有一个 DATA_YEAR 字段用于断点续传 (如果 API 没返回，手动加上)
-                    if 'DATA_YEAR' not in df.columns:
-                        df['DATA_YEAR'] = year
+                    if table_exists:
+                        # 过滤列：只保留 DB 中存在的列 (严格模式)
+                        valid_columns = []
+                        db_col_set = set([c.lower() for c in db_columns])
                         
-                     # 处理复杂字段 (转字符串或丢弃)
-                    for col in df.columns:
-                        if df[col].dtype == 'object':
-                             # 简单的将 list/dict 转为 string 存储，或者直接 drop
-                             df[col] = df[col].apply(lambda x: str(x) if isinstance(x, (list, dict)) else x)
+                        for col in df.columns:
+                            if col.lower() in db_col_set:
+                                valid_columns.append(col)
+                        
+                        df_final = df[valid_columns].copy()
+                        
+                        # DEBUG
+                        if chunk_idx == 0:
+                            dropped = set(df.columns) - set(valid_columns)
+                            if dropped:
+                                print(f"    ℹ️ (表已存在) 丢弃 CSV 中多余的列: {dropped}")
+                    else:
+                        if chunk_idx == 0:
+                            print(f"    🆕 (表不存在) 准备数据用于新建表...")
+
+                     # 处理复杂字段
+                    for col in df_final.columns:
+                        if df_final[col].dtype == 'object':
+                             df_final[col] = df_final[col].apply(lambda x: str(x) if isinstance(x, (list, dict)) else x)
 
                     # 3. 写入 TiDB
-                    df.to_sql(table, engine, if_exists='append', index=False, chunksize=1000)
-                    
-                    records_count = len(results)
-                    offset += records_count
-                    print(f"    💾 已存入 {records_count} 条 (Total: {offset})")
-                    
-                    if records_count < limit:
-                        break # 数据取完了
+                    start_time = time.time()
+                    try:
+                        # if_exists='append': works for both new (creates) and existing.
+                        df_final.to_sql(table, engine, if_exists='append', index=False, chunksize=1000)
+                        cost = time.time() - start_time
                         
-                except Exception as e:
-                    retry_count += 1
-                    print(f"    ❌ 出错: {e}")
-                    if retry_count > 5:
-                        print("    🚫 重试次数过多，跳过当前表/年份")
+                        records_count = len(df_final)
+                        total_records += records_count
+                        print(f"    💾 Chunk {chunk_idx+1}: resource saved {records_count} records ({cost:.2f}s)")
+                        
+                    except Exception as sql_err:
+                        print(f"    ❌ 写入数据库失败 (Chunk {chunk_idx+1}): {sql_err}")
                         break
-                    time.sleep(2)
-                    continue
-                
-                # 成功后重置 retry
-                retry_count = 0
+
+                print(f"    ✅ {table} {year} 完成，共处理 {total_records} 条记录。")
+
+            except Exception as e:
+                print(f"    ❌ 读取或处理文件失败: {e}")
+                continue
 
 if __name__ == "__main__":
-    if not FBI_API_KEY:
-        print("⚠️ 警告: 未检测到 FBI_API_KEY，请在 .env 文件中配置。")
-        # exit(1) # 可以选择退出，或者尝试无 key 访问 (通常受限)
-    
-    fetch_and_save_nibrs()
+    if not os.path.exists(DATA_DIR):
+         print(f"❌ 错误: 数据目录不存在 -> {DATA_DIR}")
+         print("请确认路径是否正确。")
+    else:
+        process_and_upload_local_data()

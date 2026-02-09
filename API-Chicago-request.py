@@ -2,6 +2,7 @@ import os
 import time
 import pandas as pd
 from sodapy import Socrata
+import json
 # 导入 text 用于 SQL 查询
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
@@ -76,8 +77,11 @@ def fetch_and_save_all():
                 
                 # 重要：移除包含字典的字段（如 'location'），否则会报 "dict can not be used as parameter"
                 # 这些复杂字段 SQL 无法直接处理
+                # if 'location' in batch_df.columns:
+                #     batch_df = batch_df.drop(columns=['location'])
+                # 转换 location 字段为 JSON 字符串
                 if 'location' in batch_df.columns:
-                    batch_df = batch_df.drop(columns=['location'])
+                    batch_df['location'] = batch_df['location'].apply(lambda x: json.dumps(x) if isinstance(x, dict) else x)
                 
                 batch_df.columns = [col.upper() for col in batch_df.columns]
                 if 'DATE' in batch_df.columns:
