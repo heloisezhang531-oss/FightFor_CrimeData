@@ -1,6 +1,9 @@
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import Engine, text
 import streamlit as st
+import plotly.express as px
+import requests
+import json
 
 # Common date filter clause
 DATE_FILTER = "year >= 2015 AND year <= 2024"
@@ -188,11 +191,12 @@ def get_recent_data(engine, limit=1000):
         st.error(f"Error fetching recent data: {e}")
         return pd.DataFrame()
 
-def get_map_data(engine, limit=10000):
+def get_map_data(engine,selected_year, limit=100000):
     """Fetches latitude and longitude for a sample of crimes."""
+    #Show data group by the years - zyh 2026.02.10
     try:
         with engine.connect() as conn:
-            query = text(f"SELECT latitude, longitude FROM chicago_crimes WHERE {DATE_FILTER} AND latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY date DESC LIMIT {limit}")
+            query = text(f"SELECT latitude, longitude FROM chicago_crimes WHERE YEAR = {selected_year} AND latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY date DESC LIMIT {limit}")
             result = pd.read_sql(query, conn)
             # Ensure numeric types for map
             result['latitude'] = pd.to_numeric(result['latitude'], errors='coerce')
@@ -201,4 +205,35 @@ def get_map_data(engine, limit=10000):
             return result
     except Exception as e:
         st.error(f"Error fetching map data: {e}")
+        return pd.DataFrame()
+    
+
+def get_geojson1():
+    url = "https://data.cityofchicago.org/resource/igwz-8jzy.geojson"
+    try:
+        resp = requests.get(url)
+        return resp.json()
+    except Exception as e:
+        st.error(f"GeoJSON Error: {e}")
+        return None
+
+def draw_choropleth(engine,selected_year,limit=100000):
+    """draw choropleth map for crimes by community area."""
+    try:
+        with engine.connect() as conn:
+            query = f"""
+                SELECT community_area, COUNT(*) as crime_count 
+                FROM chicago_crimes 
+                WHERE YEAR = {selected_year}
+                AND community_area IS NOT NULL 
+                GROUP BY community_area
+            """
+            df = pd.read_sql(text(query), conn)
+            df['community_area'] = df['community_area'].astype(str)
+            return df
+    except Exception as e:
+        st.error(f"Error fetching choropleth data: {e}")
+        return pd.DataFrame()
+    if df.empty:
+        st.warning("No data available for the selected year.")
         return pd.DataFrame()

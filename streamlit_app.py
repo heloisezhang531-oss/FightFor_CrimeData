@@ -96,13 +96,39 @@ def main():
         *   **Sparse Areas:** Residential and suburban areas generally show lower incident rates.
         *   **Hotspots:** Zooming in reveals specific blocks or intersections with recurring incidents.
         """)
+                # 1. 让用户选择年份 (假设你的数据是 2015-2025)
+        available_years = list(range(2015, 2025))
+        selected_year = st.selectbox("Please select a year to view the map:", available_years, index=len(available_years)-1)
+
         with st.spinner("Fetching map data (this may take a moment)..."):
-            map_data = analysis.get_map_data(engine, limit=2000) # Limit points for performance
+            map_data = analysis.get_map_data(engine, selected_year, limit=200000) # Limit points for performance
             if not map_data.empty:
                 st.map(map_data)
             else:
                 st.warning("No location data available for map.")
-
+        
+        st.subheader(f"Crime Choropleth Map by Community Area in {selected_year}")
+        results = analysis.draw_choropleth(engine, selected_year)
+ 
+        geojson_data = analysis.get_geojson1()
+        fig = px.choropleth_map(
+            data_frame=results,
+            geojson= geojson_data,
+            locations='community_area',      
+            featureidkey="properties.area_numbe", 
+            color='crime_count',             
+            color_continuous_scale="Reds",    
+            range_color=(0, results['crime_count'].max()),
+            map_style="carto-positron",
+            zoom=9,
+            center={"lat": 41.8781, "lon": -87.6298},
+            opacity=0.5,
+            labels={'crime_count': 'Crime Count', 'community_area': 'Community Area Number'}
+        )
+    
+        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+        st.plotly_chart(fig)
+       
     # --- TAB 3: RAW DATA ---
     with tab3:
         st.header("Raw Data Sample (2015-2024)")
