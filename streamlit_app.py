@@ -6,9 +6,10 @@ import plotly.graph_objects as go
 import os
 from dotenv import load_dotenv
 
+
 # Import our analysis module
 import analysis
-
+import NIBRSAnalysis as nibrs
 # Load environment variables
 load_dotenv()
 
@@ -42,13 +43,14 @@ def main():
         return
 
     # --- Tabs Layout ---
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "Overview", 
         "Geographical Distribution",
         "Raw Data", 
         "Key Statistics", 
         "Temporal Trends", 
-        "Categorical Analysis"
+        "Categorical Analysis",
+        "Victim Risk Analysis"
     ])
 
     # --- TAB 1: OVERVIEW ---
@@ -320,6 +322,62 @@ def main():
                      fig_loc.update_traces(marker_color='steelblue')
                      fig_loc.update_layout(yaxis={'categoryorder':'total ascending'})
                      st.plotly_chart(fig_loc, width="stretch")
+
+
+    # Tab 7 Victim Demographic
+    with tab7:
+        st.header("Victim Risk Profiling Dashboard")
+        st.markdown("🕵️‍♂️ Victim Risk Profiling & Domestic Violence Analysis.")
+
+        # Victim Demographic    
+        df = nibrs.get_data(engine)
+        # age range 
+        age_min, age_max = int(df['age_num'].min()), int(df['age_num'].max())
+        selected_age = st.sidebar.slider("Select Victim Age Range", age_min, age_max, (age_min, age_max))
+
+        # crime categories
+        categories = df['offense_category_name'].unique().tolist()
+        selected_cat = st.sidebar.multiselect("Select Offense Categories", categories, default=categories)
+
+        mask = (df['age_num'].between(*selected_age)) & (df['offense_category_name'].isin(selected_cat))
+        filtered_df = df[mask]
+
+                # --- 1. KPI ---
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Victims", len(filtered_df))
+        with col2:
+            domestic_cases = filtered_df[filtered_df['RELATIONSHIP_NAME'].isin(['Spouse', 'Boyfriend/Girlfriend', 'Family Member'])]
+            st.metric("Domestic Cases", len(domestic_cases))
+        with col3:
+            st.metric("Avg Victim Age", round(filtered_df['age_num'].mean(), 1))
+
+        st.divider()
+
+        # ---2. victim demographics ---
+        row1_col1, row1_col2 = st.columns(2)
+
+        with row1_col1:
+            st.subheader("Victim Age & Gender Distribution")
+            fig_age = px.histogram(filtered_df, x="age_num", color="sex_code", 
+                                nbins=20, barmode="group", labels={'age_num': 'Age', 'sex_code': 'Gender'})
+            st.plotly_chart(fig_age, use_container_width=True)
+
+        with row1_col2:
+            st.subheader("Top 10 Victim-Offender Relationships")
+            rel_counts = filtered_df['RELATIONSHIP_NAME'].value_counts().nlargest(10).reset_index()
+            fig_rel = px.bar(rel_counts, x='count', y='RELATIONSHIP_NAME', orientation='h', color='count')
+            st.plotly_chart(fig_rel, use_container_width=True)
+
+        # --- (Heatmap) ---
+        st.subheader("Victim Activity vs Offense Category")
+        activity_heatmap = filtered_df.groupby(['victim_activity_at_incident', 'offense_category_name']).size().unstack(fill_value=0)
+        fig_heat = px.imshow(activity_heatmap, text_auto=True, aspect="auto", color_continuous_scale='Viridis')
+        st.plotly_chart(fig_heat, use_container_width=True)
+
+        # Show raw data
+        if st.checkbox("Show Raw Data"):
+            st.write(filtered_df.head(100))
 
 if __name__ == "__main__":
     main()
