@@ -331,6 +331,8 @@ def main():
 
         # Victim Demographic    
         df = nibrs.get_data(engine)
+
+        # st.dataframe(df.head(100))
         # age range 
         age_min, age_max = int(df['age_num'].min()), int(df['age_num'].max())
         selected_age = st.sidebar.slider("Select Victim Age Range", age_min, age_max, (age_min, age_max))
@@ -347,7 +349,7 @@ def main():
         with col1:
             st.metric("Total Victims", len(filtered_df))
         with col2:
-            domestic_cases = filtered_df[filtered_df['RELATIONSHIP_NAME'].isin(['Spouse', 'Boyfriend/Girlfriend', 'Family Member'])]
+            domestic_cases = filtered_df[filtered_df['RELATIONSHIP_NAME'].isin(['Victim Was Boyfriend/Girlfriend','Victim Was Child','Victim Was Common-Law Spouse','Victim Was Spouse'])]
             st.metric("Domestic Cases", len(domestic_cases))
         with col3:
             st.metric("Avg Victim Age", round(filtered_df['age_num'].mean(), 1))
