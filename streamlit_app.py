@@ -289,39 +289,85 @@ def main():
 
     # --- TAB 6: CATEGORICAL ANALYSIS ---
     with tab6:
-        st.header("Categorical Analysis")
+        st.header("Categorical & Location Analysis")
 
         col1, col2 = st.columns(2)
+        
+        top_type_names = []
+        top_loc_names = []
 
         with col1:
-             st.subheader("Top 10 Crime Types")
+             st.subheader("Top 10 Crime Types (Arrest Breakdown)")
              with st.spinner("Fetching crime types..."):
-                 top_crimes = analysis.get_top_crime_types(engine, limit=10)
+                 top_crimes = analysis.get_top_crime_types_stacked(engine, limit=10)
                  if not top_crimes.empty:
-                     # Default Plolty colors or steelblue for consistency
-                     fig_type = px.bar(top_crimes, x='count', y='primary_type', orientation='h',
-                                       title="Most Frequent Crime Types",
-                                       labels={'count': 'Count', 'primary_type': 'Crime Type'})
-                     fig_type.update_traces(marker_color='steelblue')
-                     fig_type.update_layout(yaxis={'categoryorder':'total ascending'})
-                     st.plotly_chart(fig_type, width="stretch")
+                     # Identify top types for heatmap later
+                     top_type_names = top_crimes.groupby('primary_type')['count'].sum().sort_values(ascending=False).index.tolist()
+                     
+                     fig_type = px.bar(
+                         top_crimes, 
+                         y='primary_type', 
+                         x='count', 
+                         color='arrest',
+                         orientation='h',
+                         title="Crime Types by Arrest Status",
+                         category_orders={'primary_type': top_type_names}, # Ensure sorted by total
+                         color_discrete_map={'True': '#FF6B6B', 'False': '#4ECDC4'}
+                     )
+                     # Reverse list to show highest at top
+                     fig_type.update_layout(yaxis={'categoryorder':'array', 'categoryarray': top_type_names[::-1]})
+                     st.plotly_chart(fig_type, use_container_width=True)
 
         with col2:
-             st.subheader("Top 10 Locations")
-             st.info("""
-             **Analyst Insight:**
-             *   **Police Facilities** have the highest arrest rates (~70%), likely due to surrender or immediate processing.
-             *   **Streets** and **Residences** see the highest volume but lower immediate arrest rates.
-             """)
+             st.subheader("Top 10 Locations (Arrest Breakdown)")
              with st.spinner("Fetching locations..."):
-                 top_locs = analysis.get_top_locations(engine, limit=10)
+                 top_locs = analysis.get_top_locations_stacked(engine, limit=10)
                  if not top_locs.empty:
-                     fig_loc = px.bar(top_locs, x='count', y='location_description', orientation='h',
-                                      title="Common Crime Locations",
-                                      labels={'count': 'Count', 'location_description': 'Location'})
-                     fig_loc.update_traces(marker_color='steelblue')
-                     fig_loc.update_layout(yaxis={'categoryorder':'total ascending'})
-                     st.plotly_chart(fig_loc, width="stretch")
+                     # Identify top locations for heatmap later
+                     top_loc_names = top_locs.groupby('location_description')['count'].sum().sort_values(ascending=False).index.tolist()
+                     
+                     fig_loc = px.bar(
+                         top_locs, 
+                         y='location_description', 
+                         x='count', 
+                         color='arrest',
+                         orientation='h',
+                         title="Locations by Arrest Status",
+                         category_orders={'location_description': top_loc_names},
+                         color_discrete_map={'True': '#FF6B6B', 'False': '#4ECDC4'}
+                     )
+                     # Reverse list to show highest at top
+                     fig_loc.update_layout(yaxis={'categoryorder':'array', 'categoryarray': top_loc_names[::-1]})
+                     st.plotly_chart(fig_loc, use_container_width=True)
+
+        st.divider()
+        st.subheader("Interactive Heatmap: Top Crimes vs. Locations")
+        st.info("Visualizing the density of the top 10 crime types across the top 10 locations.")
+        
+        with st.spinner("Generating crime-location heatmap..."):
+            if top_type_names and top_loc_names:
+                heatmap_data = analysis.get_crime_location_heatmap(engine, top_type_names, top_loc_names)
+                if not heatmap_data.empty:
+                    fig_heat = px.imshow(
+                        heatmap_data, 
+                        labels=dict(x="Location", y="Crime Type", color="Count"),
+                        aspect="auto",
+                        color_continuous_scale='Viridis',
+                        text_auto=True
+                    )
+                    fig_heat.update_layout(title="Frequency of Top Crimes in Top Locations")
+                    st.plotly_chart(fig_heat, use_container_width=True)
+                else:
+                    st.warning("No data found for heatmap intersection.")
+            else:
+                st.warning("Could not generate heatmap due to missing data in previous steps.")
+
+        st.info("""
+        **Analyst Insight:**
+        *   **Theft** and **Battery** are the most frequent crimes, but **Battery** shows a higher arrest rate compared to **Theft**.
+        *   **Streets** and **Residences** are high-volume locations. However, arrests are notably more frequent in **Apartments** compared to open streets.
+        *   **Heatmap Analysis:** The intersection of **Theft** and **Street** is the most significant hotspot, indicating a need for targeted patrol in these areas.
+        """)
 
 
     # Tab 7 Victim Demographic
@@ -330,56 +376,71 @@ def main():
         st.markdown("🕵️‍♂️ Victim Risk Profiling & Domestic Violence Analysis.")
 
         # Victim Demographic    
-        df = nibrs.get_data(engine)
+        # 1. Fetch Metadata first (Lightweight)
+        age_min, age_max, categories = nibrs.get_filter_metadata(engine)
+        
+        # Ensure age_min and age_max are valid integers
+        age_min = int(age_min) if age_min is not None else 0
+        age_max = int(age_max) if age_max is not None else 100
+        if age_max <= age_min: age_max = age_min + 1
 
-        # st.dataframe(df.head(100))
-        # age range 
-        age_min, age_max = int(df['age_num'].min()), int(df['age_num'].max())
-        selected_age = st.sidebar.slider("Select Victim Age Range", age_min, age_max, (age_min, age_max))
+        selected_age = st.slider("Select Victim Age Range", age_min, age_max, (age_min, age_max))
+        selected_cat = st.multiselect("Select Offense Categories", categories, default=categories)
 
-        # crime categories
-        categories = df['offense_category_name'].unique().tolist()
-        selected_cat = st.sidebar.multiselect("Select Offense Categories", categories, default=categories)
-
-        mask = (df['age_num'].between(*selected_age)) & (df['offense_category_name'].isin(selected_cat))
-        filtered_df = df[mask]
-
-                # --- 1. KPI ---
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Victims", len(filtered_df))
-        with col2:
-            domestic_cases = filtered_df[filtered_df['RELATIONSHIP_NAME'].isin(['Victim Was Boyfriend/Girlfriend','Victim Was Child','Victim Was Common-Law Spouse','Victim Was Spouse'])]
-            st.metric("Domestic Cases", len(domestic_cases))
-        with col3:
-            st.metric("Avg Victim Age", round(filtered_df['age_num'].mean(), 1))
+        # 2. Fetch Aggregated Data (Optimized)
+        with st.spinner("Analyzing Victim Risk Data..."):
+             # KPI
+             total_victims, domestic_cases, avg_age = nibrs.get_kpi_data(engine, selected_age, selected_cat)
+             
+             col1, col2, col3 = st.columns(3)
+             with col1: st.metric("Total Victims", f"{total_victims:,}" if total_victims else "0")
+             with col2: st.metric("Domestic Cases", f"{domestic_cases:,}" if domestic_cases else "0")
+             with col3: st.metric("Avg Victim Age", round(avg_age, 1) if avg_age else 0)
 
         st.divider()
 
-        # ---2. victim demographics ---
+        # Demographics & Relationships
         row1_col1, row1_col2 = st.columns(2)
-
+        
         with row1_col1:
             st.subheader("Victim Age & Gender Distribution")
-            fig_age = px.histogram(filtered_df, x="age_num", color="sex_code", 
-                                nbins=20, barmode="group", labels={'age_num': 'Age', 'sex_code': 'Gender'})
-            st.plotly_chart(fig_age, use_container_width=True)
+            with st.spinner("Loading demographics..."):
+                demo_df = nibrs.get_demographics_data(engine, selected_age, selected_cat)
+            if not demo_df.empty:
+                fig_age = px.histogram(demo_df, x="age_num", y="count", color="sex_code", 
+                                    nbins=20, barmode="group", labels={'age_num': 'Age', 'sex_code': 'Gender'})
+                st.plotly_chart(fig_age, use_container_width=True)
+            else:
+                st.info("No demographic data available.")
 
         with row1_col2:
             st.subheader("Top 10 Victim-Offender Relationships")
-            rel_counts = filtered_df['RELATIONSHIP_NAME'].value_counts().nlargest(10).reset_index()
-            fig_rel = px.bar(rel_counts, x='count', y='RELATIONSHIP_NAME', orientation='h', color='count')
-            st.plotly_chart(fig_rel, use_container_width=True)
+            with st.spinner("Loading relationships..."):
+                rel_df = nibrs.get_relationship_data(engine, selected_age, selected_cat)
+            if not rel_df.empty:
+                fig_rel = px.bar(rel_df, x='count', y='RELATIONSHIP_NAME', orientation='h', 
+                                color='count', title="Top Relationships")
+                fig_rel.update_layout(yaxis={'categoryorder':'total ascending'})
+                st.plotly_chart(fig_rel, use_container_width=True)
+            else:
+                st.info("No relationship data available.")
 
-        # --- (Heatmap) ---
+        # Heatmap
         st.subheader("Victim Activity vs Offense Category")
-        activity_heatmap = filtered_df.groupby(['victim_activity_at_incident', 'offense_category_name']).size().unstack(fill_value=0)
-        fig_heat = px.imshow(activity_heatmap, text_auto=True, aspect="auto", color_continuous_scale='Viridis')
-        st.plotly_chart(fig_heat, use_container_width=True)
+        with st.spinner("Generating heatmap..."):
+            heat_raw = nibrs.get_heatmap_data(engine, selected_age, selected_cat)
+        if not heat_raw.empty:
+            activity_heatmap = heat_raw.pivot(index='victim_activity_at_incident', columns='offense_category_name', values='count').fillna(0)
+            fig_heat = px.imshow(activity_heatmap, text_auto=True, aspect="auto", color_continuous_scale='Viridis')
+            st.plotly_chart(fig_heat, use_container_width=True)
+        else:
+            st.info("No activity data available.")
 
-        # Show raw data
-        if st.checkbox("Show Raw Data"):
-            st.write(filtered_df.head(100))
+        # Raw Data Sample
+        if st.checkbox("Show Raw Data Sample"):
+            with st.spinner("Fetching raw sample..."):
+                raw_df = nibrs.get_raw_sample(engine, selected_age, selected_cat)
+            st.dataframe(raw_df, width="stretch")
 
 if __name__ == "__main__":
     main()

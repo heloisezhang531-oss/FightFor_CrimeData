@@ -155,26 +155,93 @@ def get_heatmap_data(engine):
         st.error(f"Error fetching heatmap data: {e}")
         return pd.DataFrame()
 
-def get_top_crime_types(engine, limit=10):
-    """Fetches top N primary crime types."""
+def get_top_crime_types_stacked(engine, limit=10):
+    """Fetches top N primary crime types, broken down by arrest status."""
     try:
         with engine.connect() as conn:
-            query = text(f"SELECT primary_type, COUNT(*) as count FROM chicago_crimes WHERE {DATE_FILTER} GROUP BY primary_type ORDER BY count DESC LIMIT {limit}")
+            # 1. Provide subquery for top types to avoid errors with limit inside IN clause
+            # MySQL 5.7+ / TiDB usually supports this, but nested select is safer
+            subquery = text(f"SELECT primary_type FROM chicago_crimes WHERE {DATE_FILTER} GROUP BY primary_type ORDER BY COUNT(*) DESC LIMIT {limit}")
+            top_types = [row[0] for row in conn.execute(subquery).fetchall()]
+            
+            if not top_types:
+                return pd.DataFrame()
+            
+            # 2. Get breakdown for these types
+            types_list = "', '".join([str(t).replace("'", "''") for t in top_types])
+            query = text(f"""
+                SELECT primary_type, arrest, COUNT(*) as count 
+                FROM chicago_crimes 
+                WHERE {DATE_FILTER} AND primary_type IN ('{types_list}')
+                GROUP BY primary_type, arrest
+                ORDER BY count DESC
+            """)
             result = pd.read_sql(query, conn)
+            
+            # Ensure 'arrest' is a readable string label
+            result['arrest'] = result['arrest'].astype(str).replace({'1': 'True', '0': 'False', 'true': 'True', 'false': 'False', 'True': 'True', 'False': 'False'})
             return result
     except Exception as e:
         st.error(f"Error fetching top crime types: {e}")
         return pd.DataFrame()
 
-def get_top_locations(engine, limit=10):
-    """Fetches top N location descriptions."""
+def get_top_locations_stacked(engine, limit=10):
+    """Fetches top N locations, broken down by arrest status."""
     try:
         with engine.connect() as conn:
-            query = text(f"SELECT location_description, COUNT(*) as count FROM chicago_crimes WHERE {DATE_FILTER} GROUP BY location_description ORDER BY count DESC LIMIT {limit}")
+            # 1. Get top locations
+            subquery = text(f"SELECT location_description FROM chicago_crimes WHERE {DATE_FILTER} GROUP BY location_description ORDER BY COUNT(*) DESC LIMIT {limit}")
+            top_locs = [row[0] for row in conn.execute(subquery).fetchall()]
+            
+            if not top_locs:
+                return pd.DataFrame()
+
+            # 2. Get breakdown
+            locs_list = "', '".join([str(l).replace("'", "''") for l in top_locs])
+            query = text(f"""
+                SELECT location_description, arrest, COUNT(*) as count 
+                FROM chicago_crimes 
+                WHERE {DATE_FILTER} AND location_description IN ('{locs_list}')
+                GROUP BY location_description, arrest
+                ORDER BY count DESC
+            """)
             result = pd.read_sql(query, conn)
+            
+             # Ensure 'arrest' is a readable string label
+            result['arrest'] = result['arrest'].astype(str).replace({'1': 'True', '0': 'False', 'true': 'True', 'false': 'False', 'True': 'True', 'False': 'False'})
             return result
     except Exception as e:
         st.error(f"Error fetching top locations: {e}")
+        return pd.DataFrame()
+
+def get_crime_location_heatmap(engine, top_types, top_locations):
+    """Fetches heatmap data for Top Crimes vs Top Locations."""
+    try:
+        if not top_types or not top_locations:
+             return pd.DataFrame()
+        
+        # Safety for SQL IN clause
+        types_list = "', '".join([str(t).replace("'", "''") for t in top_types])
+        locs_list = "', '".join([str(l).replace("'", "''") for l in top_locations])
+        
+        with engine.connect() as conn:
+             query = text(f"""
+                SELECT primary_type, location_description, COUNT(*) as count
+                FROM chicago_crimes
+                WHERE {DATE_FILTER}
+                AND primary_type IN ('{types_list}')
+                AND location_description IN ('{locs_list}')
+                GROUP BY primary_type, location_description
+             """)
+             df = pd.read_sql(query, conn)
+             if df.empty:
+                 return pd.DataFrame()
+             
+             heatmap = df.pivot(index='primary_type', columns='location_description', values='count').fillna(0)
+             # Reorder to match input order if possible, roughly
+             return heatmap
+    except Exception as e:
+        st.error(f"Error fetching crime-location heatmap: {e}")
         return pd.DataFrame()
 
 def get_recent_data(engine, limit=1000):
