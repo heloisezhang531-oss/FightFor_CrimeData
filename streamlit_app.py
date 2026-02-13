@@ -368,17 +368,55 @@ def main():
                  # We can get total counts again to sort the plot
                  type_order = all_types_yearly_df.groupby('primary_type')['count'].sum().sort_values(ascending=False).index.tolist()
 
+                 # --- Custom Y-Axis Scaling (30-100% compressed) ---
+                 # Identify max percentage to determine if we need the compression
+                 max_p = all_types_yearly_df['percentage'].max()
+                 
+                 # Define transform function: Map 0-30 linear, 30-100 compressed to 30-40 visual space
+                 # Factor: 10 units of visual space for 70 units of actual space (30->100)
+                 def scale_y(val):
+                     if val <= 30: return val
+                     return 30 + (val - 30) * (10/70)
+
+                 all_types_yearly_df['y_visual'] = all_types_yearly_df['percentage'].apply(scale_y)
+                 
                  fig_all_trend = px.bar(
                      all_types_yearly_df,
                      x='primary_type',
-                     y='percentage',
+                     y='y_visual', 
                      color='year',
                      barmode='group',
                      title="All Crime Types: Yearly Percentage Trend (2015-2024)",
-                     labels={'percentage': 'Percentage (%)', 'primary_type': 'Crime Type', 'year': 'Year'},
+                     # Display original percentage in tooltip
+                     hover_data={'percentage': ':.1f', 'y_visual': False, 'count': True},
+                     labels={'percentage': 'Percentage (%)', 'primary_type': 'Crime Type', 'year': 'Year', 'y_visual': 'Percentage'},
                      category_orders={'primary_type': type_order}
                  )
-                 fig_all_trend.update_yaxes(ticksuffix="%")
+                 
+                 # Custom Ticks to match the scaling
+                 # 0-30 are normal. 100 maps to 40.
+                 tick_vals = [0, 10, 20, 30, 40]
+                 tick_text = ["0%", "10%", "20%", "30%", "100%"]
+                 
+                 fig_all_trend.update_yaxes(
+                     tickvals=tick_vals,
+                     ticktext=tick_text,
+                     title="Percentage (%)",
+                     range=[0, 42] # Slight buffer above 40 (100%)
+                 )
+                 
+                 # Add a dotted line at 30% to indicate the scale break
+                 # Note: shapes are positioned by axis values. x0/x1 needs to cover the chart range.
+                 # Since x-axis is categorical (crime types), x-coordinates are 0, 1, 2... len(types)-1
+                 fig_all_trend.add_shape(
+                    type="line",
+                    x0=-0.5,
+                    y0=30,
+                    x1=len(type_order)-0.5,
+                    y1=30,
+                    line=dict(color="gray", width=1, dash="dash"),
+                 )
+
                  # Since there are many types, ensure the chart is tall enough or scrollable is handled by Streamlit/Plotly
                  fig_all_trend.update_layout(height=800) 
                  st.plotly_chart(fig_all_trend, use_container_width=True)
