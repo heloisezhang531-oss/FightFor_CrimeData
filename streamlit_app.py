@@ -287,6 +287,38 @@ def main():
                                       color_continuous_scale='Viridis') # Notebook used Viridis
                  st.plotly_chart(fig_heat, width="stretch")
 
+        st.subheader("All Crime Types Temporal Trends")
+        st.info("Percentage distribution of all crime types over the last 10 years. Each crime type's yearly bars sum to 100%.")
+        with st.spinner("Loading all types yearly trend..."):
+             # Fetch ALL crime types by setting limit=None
+             all_types_yearly_df = analysis.get_top_crime_types_yearly(engine, limit=None)
+             
+             if not all_types_yearly_df.empty:
+                 # Calculate percentage per crime type
+                 total_per_type = all_types_yearly_df.groupby('primary_type')['count'].transform('sum')
+                 all_types_yearly_df['percentage'] = (all_types_yearly_df['count'] / total_per_type) * 100
+                 
+                 all_types_yearly_df['year'] = all_types_yearly_df['year'].astype(str)
+                 
+                 # Sorting options for better visualization: e.g. strictly by total count
+                 # We can get total counts again to sort the plot
+                 type_order = all_types_yearly_df.groupby('primary_type')['count'].sum().sort_values(ascending=False).index.tolist()
+
+                 fig_all_trend = px.bar(
+                     all_types_yearly_df,
+                     x='primary_type',
+                     y='percentage',
+                     color='year',
+                     barmode='group',
+                     title="All Crime Types: Yearly Percentage Trend (2015-2024)",
+                     labels={'percentage': 'Percentage (%)', 'primary_type': 'Crime Type', 'year': 'Year'},
+                     category_orders={'primary_type': type_order}
+                 )
+                 fig_all_trend.update_yaxes(ticksuffix="%")
+                 # Since there are many types, ensure the chart is tall enough or scrollable is handled by Streamlit/Plotly
+                 fig_all_trend.update_layout(height=800) 
+                 st.plotly_chart(fig_all_trend, use_container_width=True)
+
     # --- TAB 6: CATEGORICAL ANALYSIS ---
     with tab6:
         st.header("Categorical & Location Analysis")

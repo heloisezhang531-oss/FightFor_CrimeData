@@ -244,6 +244,38 @@ def get_crime_location_heatmap(engine, top_types, top_locations):
         st.error(f"Error fetching crime-location heatmap: {e}")
         return pd.DataFrame()
 
+def get_top_crime_types_yearly(engine, limit=10):
+    """Fetches yearly counts for crime types. If limit is None, fetches all."""
+    try:
+        with engine.connect() as conn:
+            # 1. Provide subquery for top types
+            if limit:
+                subquery = text(f"SELECT primary_type FROM chicago_crimes WHERE {DATE_FILTER} GROUP BY primary_type ORDER BY COUNT(*) DESC LIMIT {limit}")
+                top_types_res = conn.execute(subquery).fetchall()
+                top_types = [row[0] for row in top_types_res]
+                
+                if not top_types:
+                    return pd.DataFrame()
+                    
+                types_list = "', '".join([str(t).replace("'", "''") for t in top_types])
+                where_clause = f"AND primary_type IN ('{types_list}')"
+            else:
+                where_clause = ""
+
+            # 2. Get yearly breakdown
+            query = text(f"""
+                SELECT year, primary_type, COUNT(*) as count
+                FROM chicago_crimes
+                WHERE {DATE_FILTER} {where_clause}
+                GROUP BY year, primary_type
+                ORDER BY primary_type, year
+            """)
+            result = pd.read_sql(query, conn)
+            return result
+    except Exception as e:
+        st.error(f"Error fetching crime types yearly trends: {e}")
+        return pd.DataFrame()
+
 def get_recent_data(engine, limit=1000):
     """Fetches a sample of recent data."""
     try:
