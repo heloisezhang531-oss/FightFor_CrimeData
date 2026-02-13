@@ -316,23 +316,72 @@ def get_geojson1():
         st.error(f"GeoJSON Error: {e}")
         return None
 
-def draw_choropleth(engine,selected_year,limit=100000):
-    """draw choropleth map for crimes by community area."""
+def draw_choropleth(engine, selected_year, limit=100000):
+    """
+    Draw choropleth map for crimes by community area.
+    Now also includes Top 3 Crime Types for each area.
+    """
     try:
         with engine.connect() as conn:
+            # Fetch detailed counts by area and type
             query = f"""
-                SELECT community_area, COUNT(*) as crime_count 
+                SELECT community_area, primary_type, COUNT(*) as type_count 
                 FROM chicago_crimes 
                 WHERE YEAR = {selected_year}
                 AND community_area IS NOT NULL 
-                GROUP BY community_area
+                GROUP BY community_area, primary_type
             """
-            df = pd.read_sql(text(query), conn)
-            df['community_area'] = df['community_area'].astype(str)
-            return df
+            df_detail = pd.read_sql(text(query), conn)
+            
+            if df_detail.empty:
+                return pd.DataFrame()
+
+            # 1. Calculate Total count per area
+            df_total = df_detail.groupby('community_area')['type_count'].sum().reset_index(name='crime_count')
+
+            # 2. Identify Top 5 Crime Types per area with Counts
+            # Sort by area (asc) and count (desc)
+            df_detail = df_detail.sort_values(['community_area', 'type_count'], ascending=[True, False])
+            
+            # Take top 5
+            df_top5 = df_detail.groupby('community_area').head(5)
+            
+            # Create formatted string like "Theft (500)<br>Battery (300)..."
+            # Using <br> for HTML tooltip if supported, or comma separated
+            df_top5['formatted'] = df_top5.apply(lambda x: f"{x['primary_type']} ({x['type_count']})", axis=1)
+            
+            df_str = df_top5.groupby('community_area')['formatted'].apply(lambda x: '<br>'.join(x)).reset_index(name='top_types')
+            
+            # 3. Merge results
+            final_df = pd.merge(df_total, df_str, on='community_area', how='left')
+            
+            # Ensure proper type for GeoJSON matching
+            final_df['community_area'] = final_df['community_area'].astype(int).astype(str)
+            
+            # Map Area Number to Name
+            # Source: Chicago Data Portal / Wikipedia
+            area_names = {
+                '1': 'Rogers Park', '2': 'West Ridge', '3': 'Uptown', '4': 'Lincoln Square', '5': 'North Center',
+                '6': 'Lake View', '7': 'Lincoln Park', '8': 'Near North Side', '9': 'Edison Park', '10': 'Norwood Park',
+                '11': 'Jefferson Park', '12': 'Forest Glen', '13': 'North Park', '14': 'Albany Park', '15': 'Portage Park',
+                '16': 'Irving Park', '17': 'Dunning', '18': 'Montclare', '19': 'Belmont Cragin', '20': 'Hermosa',
+                '21': 'Avondale', '22': 'Logan Square', '23': 'Humboldt Park', '24': 'West Town', '25': 'Austin',
+                '26': 'West Garfield Park', '27': 'East Garfield Park', '28': 'Near West Side', '29': 'North Lawndale', '30': 'South Lawndale',
+                '31': 'Lower West Side', '32': 'Loop', '33': 'Near South Side', '34': 'Armour Square', '35': 'Douglas',
+                '36': 'Oakland', '37': 'Fuller Park', '38': 'Grand Boulevard', '39': 'Kenwood', '40': 'Washington Park',
+                '41': 'Hyde Park', '42': 'Woodlawn', '43': 'South Shore', '44': 'Chatham', '45': 'Avalon Park',
+                '46': 'South Chicago', '47': 'Burnside', '48': 'Calumet Heights', '49': 'Roseland', '50': 'Pullman',
+                '51': 'South Deering', '52': 'East Side', '53': 'West Pullman', '54': 'Riverdale', '55': 'Hegewisch',
+                '56': 'Garfield Ridge', '57': 'archer Heights', '58': 'Brighton Park', '59': 'McKinley Park', '60': 'Bridgeport',
+                '61': 'New City', '62': 'West Elsdon', '63': 'Gage Park', '64': 'Clearing', '65': 'West Lawn',
+                '66': 'Chicago Lawn', '67': 'West Englewood', '68': 'Englewood', '69': 'Greater Grand Crossing', '70': 'Ashburn',
+                '71': 'Auburn Gresham', '72': 'Beverly', '73': 'Washington Heights', '74': 'Mount Greenwood', '75': 'Morgan Park',
+                '76': 'O\'Hare', '77': 'Edgewater'
+            }
+            final_df['community_name'] = final_df['community_area'].map(area_names).fillna('Unknown')
+            
+            return final_df
+
     except Exception as e:
         st.error(f"Error fetching choropleth data: {e}")
-        return pd.DataFrame()
-    if df.empty:
-        st.warning("No data available for the selected year.")
         return pd.DataFrame()

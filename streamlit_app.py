@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
+import pydeck as pdk
 import os
 from dotenv import load_dotenv
 
@@ -91,45 +92,108 @@ def main():
     # --- TAB 2: GEOGRAPHICAL DISTRIBUTION ---
     with tab2:
         st.header("Geographical Distribution")
-        st.markdown("**Crime Incident Locations (Sample)**")
+        st.markdown("**Crime Incident Locations**")
         st.info("""
         **Analyst Insight:**
         *   **High Density Areas:** Concentrated crime activity is visible in specific urban centers and commercial districts.
         *   **Sparse Areas:** Residential and suburban areas generally show lower incident rates.
         *   **Hotspots:** Zooming in reveals specific blocks or intersections with recurring incidents.
         """)
-                # 1. 让用户选择年份 (假设你的数据是 2015-2025)
+                # 1. 让用户选择年份 (假设你的数据是 2015-2024)
         available_years = list(range(2015, 2025))
         selected_year = st.selectbox("Please select a year to view the map:", available_years, index=len(available_years)-1)
 
         with st.spinner("Fetching map data (this may take a moment)..."):
             map_data = analysis.get_map_data(engine, selected_year, limit=200000) # Limit points for performance
             if not map_data.empty:
-                st.map(map_data)
+                # st.map(map_data)
+                # Use PyDeck for more control over point size (radius) and color
+                layer = pdk.Layer(
+                    "ScatterplotLayer",
+                    map_data,
+                    get_position=["longitude", "latitude"],
+                    get_color=[200, 30, 0, 160], # Red with transparency
+                    get_radius=20,  # Radius in meters. Adjust to make smaller/larger.
+                    pickable=True,
+                    opacity=0.8,
+                    filled=True,
+                )
+                
+                view_state = pdk.ViewState(
+                    latitude=41.8781, # Chicago Center
+                    longitude=-87.6298,
+                    zoom=10,
+                    pitch=0,
+                )
+                
+                st.pydeck_chart(pdk.Deck(
+                    layers=[layer],
+                    initial_view_state=view_state,
+                    tooltip={"text": "Crime Location"}
+                ))
             else:
                 st.warning("No location data available for map.")
         
-        st.subheader(f"Crime Choropleth Map by Community Area in {selected_year}")
-        results = analysis.draw_choropleth(engine, selected_year)
- 
+        st.divider()
+        st.subheader("Comparative Crime Choropleth Maps by Community Area")
+        st.info("Compare crime distributions across different years.")
+
+        # Load GeoJSON once
         geojson_data = analysis.get_geojson1()
-        fig = px.choropleth_map(
-            data_frame=results,
-            geojson= geojson_data,
-            locations='community_area',      
-            featureidkey="properties.area_numbe", 
-            color='crime_count',             
-            color_continuous_scale="Reds",    
-            range_color=(0, results['crime_count'].max()),
-            map_style="carto-positron",
-            zoom=9,
-            center={"lat": 41.8781, "lon": -87.6298},
-            opacity=0.5,
-            labels={'crime_count': 'Crime Count', 'community_area': 'Community Area Number'}
-        )
-    
-        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-        st.plotly_chart(fig)
+        
+        c1, c2 = st.columns(2)
+        
+        # --- Map 1 ---
+        with c1:
+            year_a = st.selectbox("Select Year (Left Map)", available_years, index=0, key="year_a_select")
+            results_a = analysis.draw_choropleth(engine, year_a)
+            
+            if not results_a.empty and geojson_data:
+                fig_a = px.choropleth_map(
+                    data_frame=results_a,
+                    geojson=geojson_data,
+                    locations='community_area',      
+                    featureidkey="properties.area_numbe", 
+                    color='crime_count',             
+                    color_continuous_scale="Reds",    
+                    range_color=(0, results_a['crime_count'].max()),
+                    map_style="carto-positron",
+                    zoom=9,
+                    center={"lat": 41.8781, "lon": -87.6298},
+                    opacity=0.5,
+                    labels={'crime_count': 'Count', 'community_name': 'Community', 'top_types': 'Top 5 Crimes'},
+                    hover_data={'community_name': True, 'crime_count': True, 'top_types': True, 'community_area': False}
+                )
+                fig_a.update_layout(margin={"r":0,"t":30,"l":0,"b":0}, title=f"Crime Distribution in {year_a}")
+                st.plotly_chart(fig_a, use_container_width=True)
+            else:
+                st.warning(f"No data for {year_a}")
+
+        # --- Map 2 ---
+        with c2:
+            year_b = st.selectbox("Select Year (Right Map)", available_years, index=len(available_years)-1, key="year_b_select")
+            results_b = analysis.draw_choropleth(engine, year_b)
+            
+            if not results_b.empty and geojson_data:
+                fig_b = px.choropleth_map(
+                    data_frame=results_b,
+                    geojson=geojson_data,
+                    locations='community_area',      
+                    featureidkey="properties.area_numbe", 
+                    color='crime_count',             
+                    color_continuous_scale="Reds",    
+                    range_color=(0, results_b['crime_count'].max()),
+                    map_style="carto-positron",
+                    zoom=9,
+                    center={"lat": 41.8781, "lon": -87.6298},
+                    opacity=0.5,
+                    labels={'crime_count': 'Count', 'community_name': 'Community', 'top_types': 'Top 5 Crimes'},
+                    hover_data={'community_name': True, 'crime_count': True, 'top_types': True, 'community_area': False}
+                )
+                fig_b.update_layout(margin={"r":0,"t":30,"l":0,"b":0}, title=f"Crime Distribution in {year_b}")
+                st.plotly_chart(fig_b, use_container_width=True)
+            else:
+                st.warning(f"No data for {year_b}")
        
     # --- TAB 3: RAW DATA ---
     with tab3:
