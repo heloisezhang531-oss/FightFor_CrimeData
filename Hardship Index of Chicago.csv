@@ -1,82 +1,78 @@
-Layer,Name,GEOID,HDX_2020-2024,HDX_2020-2024_moe
-(Indicator name),,,"Hardship Index (score), 2020-2024",(90% margin of error)
-(Definition),,,"The Hardship Index is a composite score reflecting hardship in the community (higher values indicate greater hardship). It incorporates unemployment, age dependency, education, per capita income, crowded housing, and poverty into a single score that allows comparison between geographies. It is highly correlated with other measures of economic hardship, such as labor force statistics, and with poor health outcomes. See technical notes for details.",
-(Citation),,,"U.S. Census Bureau - American Community Survey (Calculated by Metopio)",
----,---,---,---,---
-Community area,Rogers Park,1,52.924703695294006,
-Community area,Norwood Park,10,30.50422292942487,
-Community area,Jefferson Park,11,30.91804574579658,
-Community area,Forest Glen,12,15.92976996167712,
-Community area,North Park,13,63.755760336475554,
-Community area,Albany Park,14,57.55080244474001,
-Community area,Portage Park,15,46.918428280638786,
-Community area,Irving Park,16,41.09838533241461,
-Community area,Dunning,17,47.142306756433015,
-Community area,Montclare,18,71.00501997849919,
-Community area,Belmont Cragin,19,82.17155704088482,
-Community area,West Ridge,2,76.07165815255526,
-Community area,Hermosa,20,77.96793524573552,
-Community area,Avondale,21,41.348850715341776,
-Community area,Logan Square,22,18.48488741807935,
-Community area,Humboldt Park,23,82.76737663005562,
-Community area,West Town,24,7.822825690390688,
-Community area,Austin,25,85.46915078802289,
-Community area,West Garfield Park,26,91.05035177099343,
-Community area,East Garfield Park,27,92.15091871348717,
-Community area,Near West Side,28,28.69022177702372,
-Community area,North Lawndale,29,87.84718517115365,
-Community area,Uptown,3,35.40665771312865,
-Community area,South Lawndale,30,87.14971845215106,
-Community area,Lower West Side,31,66.07942865107157,
-Community area,Loop,32,6.880907991843654,
-Community area,Near South Side,33,4.347421491892502,
-Community area,Armour Square,34,87.71355007278783,
-Community area,Douglas,35,74.92314380013363,
-Community area,Oakland,36,78.94747122365531,
-Community area,Fuller Park,37,96.8884611449431,
-Community area,Grand Boulevard,38,77.7903869241361,
-Community area,Kenwood,39,52.508517738230786,
-Community area,Lincoln Square,4,23.192702125306457,
-Community area,Washington Park,40,89.9155296144411,
-Community area,Hyde Park,41,28.516254918698692,
-Community area,Woodlawn,42,78.20454863918856,
-Community area,South Shore,43,82.90628362558722,
-Community area,Chatham,44,77.61276311075105,
-Community area,Avalon Park,45,65.86539945795128,
-Community area,South Chicago,46,86.25358838963794,
-Community area,Burnside,47,92.69707314499728,
-Community area,Calumet Heights,48,66.50598948630285,
-Community area,Roseland,49,81.71987231186894,
-Community area,North Center,5,4.303042350440022,
-Community area,Pullman,50,74.5825483924615,
-Community area,South Deering,51,86.71758227037435,
-Community area,East Side,52,83.90627290777324,
-Community area,West Pullman,53,82.77724018348054,
-Community area,Riverdale,54,99.34823816379951,
-Community area,Hegewisch,55,68.39292712804114,
-Community area,Garfield Ridge,56,51.65655041893365,
-Community area,Archer Heights,57,87.43699612968422,
-Community area,Brighton Park,58,84.52959529684746,
-Community area,McKinley Park,59,68.18511447406017,
-Community area,Lake View,6,4.649422723219442,
-Community area,Bridgeport,60,58.874462108684924,
-Community area,New City,61,86.88171534851527,
-Community area,West Elsdon,62,77.06944013418908,
-Community area,Gage Park,63,89.96970597028124,
-Community area,Clearing,64,56.874334322023174,
-Community area,West Lawn,65,83.82045609652131,
-Community area,Chicago Lawn,66,87.55035998920116,
-Community area,West Englewood,67,91.89449168882683,
-Community area,Englewood,68,93.08914302542058,
-Community area,Greater Grand Crossing,69,87.60751709176671,
-Community area,Lincoln Park,7,2.4769638144132857,
-Community area,Ashburn,70,72.40126365087322,
-Community area,Auburn Gresham,71,88.92902119240028,
-Community area,Beverly,72,32.22261182162868,
-Community area,Washington Heights,73,70.85325518988292,
-Community area,Mount Greenwood,74,26.431421481824234,
-Community area,Morgan Park,75,60.570537494957776,
-Community area,O'Hare,76,38.69296294310124,
-Community area,Edgewater,77,40.406504991495645,
-Community area,Near North Side,8,3.402424707356466,
-Community area,Edison Park,9,12.132440388663511,
+Name,GEOID,HDX_2020-2024
+Rogers Park,1,52.9247037
+Norwood Park,10,30.50422293
+Jefferson Park,11,30.91804575
+Forest Glen,12,15.92976996
+North Park,13,63.75576034
+Albany Park,14,57.55080244
+Portage Park,15,46.91842828
+Irving Park,16,41.09838533
+Dunning,17,47.14230676
+Montclare,18,71.00501998
+Belmont Cragin,19,82.17155704
+West Ridge,2,76.07165815
+Hermosa,20,77.96793525
+Avondale,21,41.34885072
+Logan Square,22,18.48488742
+Humboldt Park,23,82.76737663
+West Town,24,7.82282569
+Austin,25,85.46915079
+West Garfield Park,26,91.05035177
+East Garfield Park,27,92.15091871
+Near West Side,28,28.69022178
+North Lawndale,29,87.84718517
+Uptown,3,35.40665771
+South Lawndale,30,87.14971845
+Lower West Side,31,66.07942865
+Loop,32,6.880907992
+Near South Side,33,4.347421492
+Armour Square,34,87.71355007
+Douglas,35,74.9231438
+Oakland,36,78.94747122
+Fuller Park,37,96.88846114
+Grand Boulevard,38,77.79038692
+Kenwood,39,52.50851774
+Lincoln Square,4,23.19270213
+Washington Park,40,89.91552961
+Hyde Park,41,28.51625492
+Woodlawn,42,78.20454864
+South Shore,43,82.90628363
+Chatham,44,77.61276311
+Avalon Park,45,65.86539946
+South Chicago,46,86.25358839
+Burnside,47,92.69707314
+Calumet Heights,48,66.50598949
+Roseland,49,81.71987231
+North Center,5,4.30304235
+Pullman,50,74.58254839
+South Deering,51,86.71758227
+East Side,52,83.90627291
+West Pullman,53,82.77724018
+Riverdale,54,99.34823816
+Hegewisch,55,68.39292713
+Garfield Ridge,56,51.65655042
+Archer Heights,57,87.43699613
+Brighton Park,58,84.5295953
+McKinley Park,59,68.18511447
+Lake View,6,4.649422723
+Bridgeport,60,58.87446211
+New City,61,86.88171535
+West Elsdon,62,77.06944013
+Gage Park,63,89.96970597
+Clearing,64,56.87433432
+West Lawn,65,83.8204561
+Chicago Lawn,66,87.55035999
+West Englewood,67,91.89449169
+Englewood,68,93.08914303
+Greater Grand Crossing,69,87.60751709
+Lincoln Park,7,2.476963814
+Ashburn,70,72.40126365
+Auburn Gresham,71,88.92902119
+Beverly,72,32.22261182
+Washington Heights,73,70.85325519
+Mount Greenwood,74,26.43142148
+Morgan Park,75,60.57053749
+O'Hare,76,38.69296294
+Edgewater,77,40.40650499
+Near North Side,8,3.402424707
+Edison Park,9,12.13244039
